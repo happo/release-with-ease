@@ -1,0 +1,29 @@
+{
+  "name": "release-with-ease",
+  "version": "1.0.0",
+  "description": "A script to bump the version of an npm library and update release notes. Uses OpenAI to analyze commits.",
+  "main": "index.js",
+  "bin": {
+    "release-with-ease": "bin/release-with-ease.js"
+  },
+  "scripts": {
+    "release": "node --env-file-if-exists=.env bin/release-with-ease.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/happo/release-with-ease.git"
+  },
+  "keywords": [
+    "release",
+    "openai",
+    "semver",
+    "bump",
+    "ai"
+  ],
+  "author": "henric.persson@happo.io,joe.lencioni@happo.io",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/happo/release-with-ease/issues"
+  },
+  "homepage": "https://github.com/happo/release-with-ease#readme"
+}
