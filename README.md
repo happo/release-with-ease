@@ -28,3 +28,7 @@ You can get a key from https://platform.openai.com/api-keys.
 The script also assumes that your README.md file has a `# Changelog` section.
 
 # Changelog
+
+## 1.0.0
+
+- Initial release
