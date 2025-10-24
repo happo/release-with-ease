@@ -23,9 +23,8 @@ const readline = require('readline');
 const os = require('os');
 const crypto = require('crypto');
 
-const repoRoot = path.resolve(__dirname, '..');
-const readmePath = path.join(repoRoot, 'README.md');
-const packageJsonPath = path.join(repoRoot, 'package.json');
+const readmePath = path.join(process.cwd(), 'README.md');
+const packageJsonPath = path.join(process.cwd(), 'package.json');
 
 function run(cmd, opts = {}) {
   return execSync(cmd, { stdio: 'pipe', encoding: 'utf8', ...opts });
