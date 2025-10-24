@@ -29,6 +29,10 @@ The script also assumes that your README.md file has a `# Changelog` section.
 
 # Changelog
 
+## 1.0.1
+
+- Fix path to README and package.json
+
 ## 1.0.0
 
 - Initial release
