@@ -1,7 +1,7 @@
 # release-with-ease
 
 A script that helps you bump the version of an npm library and update release
-notes. Uses OpenAI to analyze commits.
+notes. Uses Claude to analyze commits.
 
 # Usage
 
@@ -21,9 +21,9 @@ npx release-with-ease --dry-run
 
 The script requires these environment variables to be set:
 
-- `OPEN_AI_API_KEY`
+- `ANTHROPIC_API_KEY`
 
-You can get a key from https://platform.openai.com/api-keys.
+You can get a key from https://console.anthropic.com/settings/keys.
 
 The script also assumes that your README.md file has a `# Changelog` section.
 
