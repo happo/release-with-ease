@@ -1,6 +1,6 @@
 {
   "name": "release-with-ease",
-  "version": "1.0.1",
+  "version": "2.0.0",
   "description": "A script to bump the version of an npm library and update release notes. Uses Claude to analyze commits.",
   "main": "index.js",
   "bin": {
