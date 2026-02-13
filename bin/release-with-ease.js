@@ -2,14 +2,14 @@
 /*
   Release helper script
 
-  - Analyzes git history and suggests semver bump (major/minor/patch) using OpenAI
+  - Analyzes git history and suggests semver bump (major/minor/patch) using Claude
   - Prompts for confirmation or choice override
-  - Generates concise release notes using OpenAI
+  - Generates concise release notes using Claude
   - Inserts a new entry at the top of the Changelog in README.md
   - Commits changelog update, bumps version via npm, and pushes with tags
 
   Requirements:
-    - OPENAI_API_KEY environment variable must be set
+    - ANTHROPIC_API_KEY environment variable must be set
 
   Usage:
     npx release-with-ease           # Normal release
@@ -74,55 +74,50 @@ function parseCommits(raw) {
     });
 }
 
-async function askOpenAIForRelease(commits) {
-  const apiKey = process.env.OPENAI_API_KEY;
+async function askClaudeForRelease(commits) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return null;
-  const messages = [
-    {
-      role: 'system',
-      content:
-        'You are a release assistant. Given recent git commits, decide one of: major, minor, or patch following semver. Consider conventional commits, breaking changes, and scope. Also generate concise release notes for a public changelog. Respond with JSON containing "bump" (major/minor/patch), "reasoning" (brief explanation for version bump), and "notes" (array of 3-8 short bullet points of the most important user-facing changes). Use present tense for release notes (e.g. "Add script" not "Added script" or "Adds script"). Do not wrap the JSON in ```json or anything else.',
-    },
-    {
-      role: 'user',
-      content: commits
-        .map(c => `- ${c.subject}\n${c.body ? c.body.trim() : ''}`)
-        .join('\n'),
-    },
-  ];
 
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+  const systemPrompt =
+    'You are a release assistant. Given recent git commits, decide one of: major, minor, or patch following semver. Consider conventional commits, breaking changes, and scope. Also generate concise release notes for a public changelog. Respond with JSON containing "bump" (major/minor/patch), "reasoning" (brief explanation for version bump), and "notes" (array of 3-8 short bullet points of the most important user-facing changes). Use present tense for release notes (e.g. "Add script" not "Added script" or "Adds script"). Do not wrap the JSON in ```json or anything else.';
+
+  const userContent = commits
+    .map(c => `- ${c.subject}\n${c.body ? c.body.trim() : ''}`)
+    .join('\n');
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${apiKey}`,
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages,
-      temperature: 0.2,
+      model: 'claude-haiku-4-5',
       max_tokens: 500,
+      temperature: 0.2,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userContent }],
     }),
   });
   if (!res.ok) {
-    // throw an actionable error here
     console.error(await res.text());
     throw new Error(
       `Failed to determine version bump: ${res.statusText} ${res.status}`,
     );
   }
   const data = await res.json();
-  const content = (data.choices?.[0]?.message?.content || '').trim();
+  const content = (data.content?.[0]?.text || '').trim();
 
   const parsed = JSON.parse(content);
   if (!parsed.bump || !['major', 'minor', 'patch'].includes(parsed.bump)) {
-    throw new Error('Invalid bump value in OpenAI response');
+    throw new Error('Invalid bump value in Claude response');
   }
   if (!parsed.reasoning) {
-    throw new Error('Missing reasoning in OpenAI response');
+    throw new Error('Missing reasoning in Claude response');
   }
   if (!parsed.notes || !Array.isArray(parsed.notes)) {
-    throw new Error('Missing or invalid notes array in OpenAI response');
+    throw new Error('Missing or invalid notes array in Claude response');
   }
 
   return {
@@ -188,13 +183,13 @@ function parseArgs() {
     const { dryRun } = parseArgs();
 
     // Check for required environment variable early
-    if (!process.env.OPENAI_API_KEY) {
-      console.error('❌ OPENAI_API_KEY environment variable is required.');
+    if (!process.env.ANTHROPIC_API_KEY) {
+      console.error('❌ ANTHROPIC_API_KEY environment variable is required.');
       console.error(
-        '   You can get one from https://platform.openai.com/api-keys',
+        '   You can get one from https://console.anthropic.com/settings/keys',
       );
       console.error(
-        '   Please add it to your .env file: OPENAI_API_KEY=your_key_here',
+        '   Please add it to your .env file: ANTHROPIC_API_KEY=your_key_here',
       );
       process.exit(1);
     }
@@ -222,9 +217,9 @@ function parseArgs() {
       console.log(`  ${shortSha} ${commit.subject}`);
     });
 
-    console.log('\nWaiting for OpenAI to analyze commits...');
+    console.log('\nWaiting for Claude to analyze commits...');
 
-    const result = await askOpenAIForRelease(commits);
+    const result = await askClaudeForRelease(commits);
 
     const { bump, reasoning, notes } = result;
 
