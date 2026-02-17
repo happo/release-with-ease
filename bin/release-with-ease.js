@@ -107,7 +107,8 @@ async function askClaudeForRelease(commits) {
     );
   }
   const data = await res.json();
-  const content = (data.content?.[0]?.text || '').trim();
+  const raw = (data.content?.[0]?.text || '').trim();
+  const content = raw.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
 
   const parsed = JSON.parse(content);
   if (!parsed.bump || !['major', 'minor', 'patch'].includes(parsed.bump)) {
