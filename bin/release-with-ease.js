@@ -82,7 +82,11 @@ async function askClaudeForRelease(commits) {
     'You are a release assistant. Given recent git commits, decide one of: major, minor, or patch following semver. Consider conventional commits, breaking changes, and scope. Also generate concise release notes for a public changelog. Respond with JSON containing "bump" (major/minor/patch), "reasoning" (brief explanation for version bump), and "notes" (array of 3-8 short bullet points of the most important user-facing changes). Use present tense for release notes (e.g. "Add script" not "Added script" or "Adds script"). Do not wrap the JSON in ```json or anything else.';
 
   const userContent = commits
-    .map(c => `- ${c.subject}\n${c.body ? c.body.trim() : ''}`)
+    .map(c => {
+      const body = c.body ? c.body.trim() : '';
+      const truncatedBody = body.length > 500 ? body.slice(0, 500) + '…' : body;
+      return `- ${c.subject}\n${truncatedBody}`;
+    })
     .join('\n');
 
   const res = await fetch('https://api.anthropic.com/v1/messages', {
