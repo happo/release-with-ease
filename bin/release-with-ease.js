@@ -375,7 +375,7 @@ function parseArgs() {
       console.log(`  ${step++}. git push origin main --tags`);
       console.log(`  ${step++}. gh release create v${newVersion} --title "v${newVersion}" --notes-file <entry>`);
       if (isPublicPackage) {
-        console.log(`  ${step++}. npm publish`);
+        console.log(`  ${step++}. npm publish --otp=<2FA token>`);
       }
       console.log(`\n✅ Dry run complete. Use without --dry-run to execute.`);
       fs.unlinkSync(tempEntryPath);
@@ -422,7 +422,17 @@ function parseArgs() {
     }
 
     if (isPublicPackage) {
-      run('npm publish');
+      const whoami = safeRun('npm whoami');
+      if (!whoami.ok) {
+        console.log('\n🔐 You are not logged in to npm. Running npm login...');
+        run('npm login', { stdio: 'inherit' });
+      }
+      const otp = (await prompt('\n🔑 Enter npm 2FA OTP token: ')).trim();
+      if (!otp) {
+        console.error('❌ No OTP token provided. Aborting.');
+        process.exit(1);
+      }
+      run(`npm publish --otp=${otp}`);
       console.log(`\n📦 Published ${pkg.name}@${newVersion} to npm.`);
     }
 
