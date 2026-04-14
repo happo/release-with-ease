@@ -34,6 +34,14 @@ the GitHub release.
 
 # Changelog
 
+## 2.1.0
+
+- Support npm publish and GitHub releases for public npm packages [by @trotzig in #5]
+- Include PR number and author attribution in release notes for public packages [by @trotzig]
+- Auto-detect README.md changelog section; skip insertion if absent for better compatibility
+- Run `npm publish` automatically for packages without `private: true` in package.json
+- Create GitHub releases automatically via `gh release create` after every push (for public packages)
+
 ## 1.0.1
 
 - Fix path to README and package.json
