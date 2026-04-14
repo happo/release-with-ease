@@ -74,18 +74,79 @@ function parseCommits(raw) {
     });
 }
 
-async function askClaudeForRelease(commits) {
+function extractPrNumber(subject, body) {
+  // "(#123)" suffix — squash-merge style
+  const m = subject.match(/\(#(\d+)\)\s*$/);
+  if (m) return parseInt(m[1], 10);
+  // "Merge pull request #123" — merge commit style
+  const mm = subject.match(/Merge pull request #(\d+)/);
+  if (mm) return parseInt(mm[1], 10);
+  // Same patterns in body
+  const bm = (body || '').match(/\(#(\d+)\)\s*$/m);
+  if (bm) return parseInt(bm[1], 10);
+  return null;
+}
+
+function fetchGitHubMeta(commits, lastTag) {
+  const repoRes = safeRun('gh repo view --json nameWithOwner -q .nameWithOwner');
+  if (!repoRes.ok) return commits;
+  const [owner, repo] = repoRes.out.trim().split('/');
+
+  // SHA → GitHub login via compare API (best-effort)
+  const shaToLogin = {};
+  if (lastTag) {
+    const cmpRes = safeRun(
+      `gh api "repos/${owner}/${repo}/compare/${lastTag}...HEAD" --jq '.commits[] | [.sha, (.author.login // "")] | @tsv'`,
+    );
+    if (cmpRes.ok) {
+      for (const line of cmpRes.out.trim().split('\n').filter(Boolean)) {
+        const [sha, login] = line.split('\t');
+        if (sha && login) shaToLogin[sha] = login;
+      }
+    }
+  }
+
+  // Merge commit SHA → PR number via pr list (best-effort)
+  const shaToPr = {};
+  const prRes = safeRun(
+    `gh pr list --state merged --limit 100 --json number,mergeCommit --jq '.[] | select(.mergeCommit != null) | [.mergeCommit.oid, (.number | tostring)] | @tsv'`,
+  );
+  if (prRes.ok) {
+    for (const line of prRes.out.trim().split('\n').filter(Boolean)) {
+      const [sha, num] = line.split('\t');
+      if (sha && num) shaToPr[sha] = parseInt(num, 10);
+    }
+  }
+
+  return commits.map(c => ({
+    ...c,
+    githubLogin: shaToLogin[c.hash] || null,
+    prNumber: shaToPr[c.hash] ?? extractPrNumber(c.subject, c.body),
+  }));
+}
+
+async function askClaudeForRelease(commits, isPublicPackage = false) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return null;
 
-  const systemPrompt =
+  const basePrompt =
     'You are a release assistant. Given recent git commits, decide one of: major, minor, or patch following semver. Consider conventional commits, breaking changes, and scope. Also generate concise release notes for a public changelog. Respond with JSON containing "bump" (major/minor/patch), "reasoning" (brief explanation for version bump), and "notes" (array of 3-8 short bullet points of the most important user-facing changes). Use present tense for release notes (e.g. "Add script" not "Added script" or "Adds script"). Do not wrap the JSON in ```json or anything else.';
+
+  const publicExtra = isPublicPackage
+    ? ' Each commit may carry metadata in brackets like [by @login in #123]. When present, append that attribution verbatim at the end of the corresponding bullet point.'
+    : '';
+
+  const systemPrompt = basePrompt + publicExtra;
 
   const userContent = commits
     .map(c => {
       const body = c.body ? c.body.trim() : '';
       const truncatedBody = body.length > 500 ? body.slice(0, 500) + '…' : body;
-      return `- ${c.subject}\n${truncatedBody}`;
+      const meta = [];
+      if (c.githubLogin) meta.push(`by @${c.githubLogin}`);
+      if (c.prNumber) meta.push(`in #${c.prNumber}`);
+      const metaStr = meta.length ? ` [${meta.join(' ')}]` : '';
+      return `- ${c.subject}${metaStr}\n${truncatedBody}`;
     })
     .join('\n');
 
@@ -209,10 +270,13 @@ function parseArgs() {
       console.log('🔍 DRY RUN MODE - No changes will be made\n');
     }
 
+    const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+    const isPublicPackage = !pkg.private;
+
     fetchOriginTags();
     const lastVersionTag = getLastVersionTag();
     const raw = getCommitRange(lastVersionTag);
-    const commits = parseCommits(raw);
+    let commits = parseCommits(raw);
     if (!commits.length) {
       console.log('No commits found since last tag. Aborting.');
       process.exit(1);
@@ -228,9 +292,13 @@ function parseArgs() {
       console.log(`  ${shortSha} ${commit.subject}`);
     });
 
+    if (isPublicPackage) {
+      commits = fetchGitHubMeta(commits, lastVersionTag);
+    }
+
     console.log('\nWaiting for Claude to analyze commits...');
 
-    const result = await askClaudeForRelease(commits);
+    const result = await askClaudeForRelease(commits, isPublicPackage);
 
     const { bump, reasoning, notes } = result;
 
@@ -248,7 +316,6 @@ function parseArgs() {
       process.exit(1);
     }
 
-    const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
     const curVersion = pkg.version;
     const newVersion = bumpVersionString(curVersion, finalBump);
 
@@ -291,7 +358,6 @@ function parseArgs() {
     }
 
     const useReadmeChangelog = hasReadmeChangelog();
-    const isPublicPackage = !pkg.private;
 
     if (dryRun) {
       console.log(`\n🔍 DRY RUN - Would have done the following:`);
