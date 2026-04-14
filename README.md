@@ -34,6 +34,11 @@ the GitHub release.
 
 # Changelog
 
+## 2.2.0
+
+- Prompt for npm login if not authenticated before publishing
+- Improve publishing workflow with better authentication handling [by @trotzig in #6]
+
 ## 2.1.0
 
 - Support npm publish and GitHub releases for public npm packages [by @trotzig in #5]
