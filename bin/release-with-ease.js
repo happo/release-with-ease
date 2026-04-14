@@ -177,6 +177,12 @@ function prompt(question) {
   });
 }
 
+function hasReadmeChangelog() {
+  if (!fs.existsSync(readmePath)) return false;
+  const content = fs.readFileSync(readmePath, 'utf8');
+  return /^#\s*Changelog\s*$/im.test(content);
+}
+
 function parseArgs() {
   const args = process.argv.slice(2);
   const dryRun = args.includes('--dry-run');
@@ -284,38 +290,75 @@ function parseArgs() {
       process.exit(1);
     }
 
+    const useReadmeChangelog = hasReadmeChangelog();
+    const isPublicPackage = !pkg.private;
+
     if (dryRun) {
       console.log(`\n🔍 DRY RUN - Would have done the following:`);
-      console.log(
-        `  1. Insert changelog entry for ${newVersion} into README.md`,
-      );
-      console.log(`  2. git add README.md`);
-      console.log(`  3. git commit -m "Update changelog for ${newVersion}"`);
-      console.log(`  4. npm version ${finalBump} -m "%s"`);
-      console.log(`  5. git push origin main --tags`);
+      let step = 1;
+      if (useReadmeChangelog) {
+        console.log(
+          `  ${step++}. Insert changelog entry for ${newVersion} into README.md`,
+        );
+        console.log(`  ${step++}. git add README.md`);
+        console.log(
+          `  ${step++}. git commit -m "Update changelog for ${newVersion}"`,
+        );
+      }
+      console.log(`  ${step++}. npm version ${finalBump} -m "%s"`);
+      console.log(`  ${step++}. git push origin main --tags`);
+      console.log(`  ${step++}. gh release create v${newVersion} --title "v${newVersion}" --notes-file <entry>`);
+      if (isPublicPackage) {
+        console.log(`  ${step++}. npm publish`);
+      }
       console.log(`\n✅ Dry run complete. Use without --dry-run to execute.`);
       fs.unlinkSync(tempEntryPath);
       return;
     }
 
-    // Read the edited entry and insert it into README
+    // Read the edited entry
     const editedEntry = fs.readFileSync(tempEntryPath, 'utf8');
-    const readme = fs.readFileSync(readmePath, 'utf8');
-    const updatedReadme = insertChangelogEntry(
-      readme,
-      editedEntry.trim().split('\n'),
-    );
-    fs.writeFileSync(readmePath, updatedReadme);
-    fs.unlinkSync(tempEntryPath);
 
-    run('git add README.md');
-    run(`git commit -m "Update changelog for ${newVersion}"`);
+    if (useReadmeChangelog) {
+      // Insert changelog entry into README.md
+      const readme = fs.readFileSync(readmePath, 'utf8');
+      const updatedReadme = insertChangelogEntry(
+        readme,
+        editedEntry.trim().split('\n'),
+      );
+      fs.writeFileSync(readmePath, updatedReadme);
+
+      run('git add README.md');
+      run(`git commit -m "Update changelog for ${newVersion}"`);
+    }
+
+    fs.unlinkSync(tempEntryPath);
 
     // Use npm version keyword per user preference
     run(`npm version ${finalBump} -m "%s"`);
 
     // Push commit and tags explicitly
     run('git push origin main --tags');
+
+    // Create GitHub release
+    const ghNotesFile = path.join(
+      os.tmpdir(),
+      `release-notes-${crypto.randomBytes(8).toString('hex')}.md`,
+    );
+    fs.writeFileSync(ghNotesFile, editedEntry.trim());
+    try {
+      const releaseUrl = run(
+        `gh release create v${newVersion} --title "v${newVersion}" --notes-file "${ghNotesFile}"`,
+      ).trim();
+      console.log(`\n🎉 GitHub release created: ${releaseUrl}`);
+    } finally {
+      fs.unlinkSync(ghNotesFile);
+    }
+
+    if (isPublicPackage) {
+      run('npm publish');
+      console.log(`\n📦 Published ${pkg.name}@${newVersion} to npm.`);
+    }
 
     console.log(`\nRelease ${newVersion} created and pushed with tags.`);
   } catch (err) {
