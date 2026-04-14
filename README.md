@@ -25,7 +25,12 @@ The script requires these environment variables to be set:
 
 You can get a key from https://console.anthropic.com/settings/keys.
 
-The script also assumes that your README.md file has a `# Changelog` section.
+The script also requires the `gh` CLI to be installed and authenticated (used to
+create GitHub releases).
+
+If your `README.md` has a `# Changelog` section, the script will automatically
+insert the release notes there. Otherwise it skips that step and relies solely on
+the GitHub release.
 
 # Changelog
 
