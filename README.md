@@ -34,6 +34,12 @@ the GitHub release.
 
 # Changelog
 
+## 2.3.0
+
+- Add warning and confirmation prompt when publishing packages without an explicit 'private' field in package.json
+- Allow users to suppress the prompt by setting 'private': false in package.json
+- Skip npm publishing when 'private': true is set [by @trotzig in #7]
+
 ## 2.2.0
 
 - Prompt for npm login if not authenticated before publishing
