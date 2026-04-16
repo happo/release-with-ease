@@ -271,7 +271,8 @@ function parseArgs() {
     }
 
     const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
-    const isPublicPackage = !pkg.private;
+    const isPublicPackage = pkg.private !== true && pkg.private !== 'true';
+    const privateFieldMissing = isPublicPackage && pkg.private === undefined;
 
     fetchOriginTags();
     const lastVersionTag = getLastVersionTag();
@@ -376,6 +377,12 @@ function parseArgs() {
       console.log(`  ${step++}. gh release create v${newVersion} --title "v${newVersion}" --notes-file <entry>`);
       if (isPublicPackage) {
         console.log(`  ${step++}. npm publish`);
+        if (privateFieldMissing) {
+          console.log(
+            `\n⚠️  Warning: package.json has no "private" field. The package will be published to npm.\n` +
+            `   Set "private": true to prevent publishing, or "private": false to suppress this warning.`,
+          );
+        }
       }
       console.log(`\n✅ Dry run complete. Use without --dry-run to execute.`);
       fs.unlinkSync(tempEntryPath);
@@ -422,6 +429,16 @@ function parseArgs() {
     }
 
     if (isPublicPackage) {
+      if (privateFieldMissing) {
+        console.log(
+          `\n⚠️  Warning: package.json has no "private" field. About to publish ${pkg.name} to npm.`,
+        );
+        const answer = (await prompt('   Confirm publish? [y/N] ')).trim().toLowerCase();
+        if (answer !== 'y' && answer !== 'yes') {
+          console.log('Aborted. Set "private": false in package.json to suppress this prompt.');
+          process.exit(1);
+        }
+      }
       const whoami = safeRun('npm whoami');
       if (!whoami.ok) {
         console.log('\n🔐 You are not logged in to npm. Running npm login...');
