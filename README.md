@@ -34,6 +34,10 @@ the GitHub release.
 
 # Changelog
 
+## 2.3.2
+
+- Fix npm publish authentication by running npm login on auth failure [by @lencioni in #10]
+
 ## 2.3.1
 
 - Fix npm publish to avoid duplicate OTP prompts when using browser-based authentication [by @lencioni in #8]
