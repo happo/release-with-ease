@@ -444,8 +444,7 @@ function parseArgs() {
         const stderr = publishResult.err?.stderr?.toString() || '';
         if (/one-time password|otp|2fa|e401|e403|eneedauth|forbidden|unauthorized/i.test(stderr)) {
           console.log('\n🔐 npm requires authentication to publish. Running npm login...');
-          run('npm login', { stdio: 'inherit' });
-          run('npm publish', { stdio: 'inherit' });
+          run('npm login && npm publish', { stdio: 'inherit' });
         } else {
           throw publishResult.err;
         }
