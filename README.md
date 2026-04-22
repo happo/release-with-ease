@@ -34,6 +34,10 @@ the GitHub release.
 
 # Changelog
 
+## 2.3.3
+
+- Fix npm authentication flow by running login and publish as a single compound command [by @lencioni]
+
 ## 2.3.2
 
 - Fix npm publish authentication by running npm login on auth failure [by @lencioni in #10]
