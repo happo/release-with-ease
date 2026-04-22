@@ -439,14 +439,16 @@ function parseArgs() {
           process.exit(1);
         }
       }
-      const whoami = safeRun('npm whoami');
-      if (!whoami.ok) {
-        console.log('\n🔐 You are not logged in to npm. Running npm login...');
-        run('npm login', { stdio: 'inherit' });
-      }
-      const publishResult = safeRun('npm publish', { stdio: 'inherit' });
+      const publishResult = safeRun('npm publish');
       if (!publishResult.ok) {
-        throw publishResult.err;
+        const stderr = publishResult.err?.stderr?.toString() || '';
+        if (/one-time password|otp|2fa|e401|e403|eneedauth|forbidden|unauthorized/i.test(stderr)) {
+          console.log('\n🔐 npm requires authentication to publish. Running npm login...');
+          run('npm login', { stdio: 'inherit' });
+          run('npm publish', { stdio: 'inherit' });
+        } else {
+          throw publishResult.err;
+        }
       }
       console.log(`\n📦 Published ${pkg.name}@${newVersion} to npm.`);
     }
