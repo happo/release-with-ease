@@ -34,6 +34,11 @@ the GitHub release.
 
 # Changelog
 
+## 2.3.1
+
+- Fix npm publish to avoid duplicate OTP prompts when using browser-based authentication [by @lencioni in #8]
+- Add CODEOWNERS file to streamline PR review process [by @lencioni in #9]
+
 ## 2.3.0
 
 - Add warning and confirmation prompt when publishing packages without an explicit 'private' field in package.json
