@@ -444,19 +444,9 @@ function parseArgs() {
         console.log('\n🔐 You are not logged in to npm. Running npm login...');
         run('npm login', { stdio: 'inherit' });
       }
-      const publishResult = safeRun('npm publish');
+      const publishResult = safeRun('npm publish', { stdio: 'inherit' });
       if (!publishResult.ok) {
-        const stderr = publishResult.err?.stderr?.toString() || '';
-        if (/one-time password|otp|2fa/i.test(stderr)) {
-          const otp = (await prompt('\n🔑 Enter npm 2FA OTP token: ')).trim();
-          if (!otp) {
-            console.error('❌ No OTP token provided. Aborting.');
-            process.exit(1);
-          }
-          run(`npm publish --otp=${otp}`);
-        } else {
-          throw publishResult.err;
-        }
+        throw publishResult.err;
       }
       console.log(`\n📦 Published ${pkg.name}@${newVersion} to npm.`);
     }
