@@ -34,6 +34,12 @@ the GitHub release.
 
 # Changelog
 
+## 2.3.4
+
+- Fix npm publish authentication to use native npm prompts instead of manual OTP entry
+- Inherit stdio during npm publish to enable 2FA browser challenges and automatic auth handling
+- Improve user experience by matching terminal behavior when running npm publish directly [by @lencioni in #11]
+
 ## 2.3.3
 
 - Fix npm authentication flow by running login and publish as a single compound command [by @lencioni]
