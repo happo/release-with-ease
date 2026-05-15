@@ -85,6 +85,13 @@ time and you can type the code by hand.
 
 # Changelog
 
+## 2.4.0
+
+- Auto-detect npm OTP from 1Password or LastPass CLI to streamline 2FA releases [by @lencioni in #15]
+- Run npm login before publish if not authenticated, supporting browser-based web flow [by @lencioni in #14]
+- Verify default branch is checked out before releasing with dynamic branch detection [by @lencioni in #16]
+- Refuse to release unless working tree is clean and branch is in sync with origin
+
 ## 2.3.4
 
 - Fix npm publish authentication to use native npm prompts instead of manual OTP entry
