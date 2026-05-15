@@ -376,6 +376,7 @@ function parseArgs() {
       console.log(`  ${step++}. git push origin main --tags`);
       console.log(`  ${step++}. gh release create v${newVersion} --title "v${newVersion}" --notes-file <entry>`);
       if (isPublicPackage) {
+        console.log(`  ${step++}. npm whoami (run npm login if not authenticated)`);
         console.log(`  ${step++}. npm publish`);
         if (privateFieldMissing) {
           console.log(
@@ -439,6 +440,15 @@ function parseArgs() {
           process.exit(1);
         }
       }
+      const whoami = safeRun('npm whoami');
+      if (!whoami.ok) {
+        console.log('\n🔐 Not logged in to npm. Opening browser for npm login...');
+        const loginResult = safeRun('npm login', { stdio: 'inherit' });
+        if (!loginResult.ok) {
+          throw loginResult.err;
+        }
+      }
+
       const publishResult = safeRun('npm publish', { stdio: 'inherit' });
       if (!publishResult.ok) {
         throw publishResult.err;
