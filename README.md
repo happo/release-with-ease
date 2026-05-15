@@ -32,6 +32,57 @@ If your `README.md` has a `# Changelog` section, the script will automatically
 insert the release notes there. Otherwise it skips that step and relies solely on
 the GitHub release.
 
+# Publishing to npm
+
+For public packages (i.e. without `"private": true` in `package.json`), the
+script publishes to npm after creating the GitHub release.
+
+## Authentication
+
+Before publishing, the script runs `npm whoami` to check whether you're
+logged in. If you're not, it runs `npm login`, which opens a browser for
+the standard npm web auth flow. After that, `npm publish` runs normally.
+
+## 2FA and one-time passwords (OTP)
+
+For supply-chain security, we recommend keeping your npm account on the
+`auth-and-writes` 2FA mode, which requires an OTP for every publish:
+
+```sh
+npm profile set 2fa auth-and-writes
+```
+
+`auth-and-writes` protects against stolen-token attacks — a leaked
+`~/.npmrc` token cannot publish without a live OTP. The alternative
+(`auth-only`) skips the publish-time OTP but offers less protection if
+your local npm token is ever stolen.
+
+To avoid typing the OTP manually, the script auto-detects a TOTP from
+either of these password manager CLIs:
+
+- **1Password**: [`op`](https://developer.1password.com/docs/cli/) — uses
+  `op item get <name> --otp`
+- **LastPass**: [`lpass`](https://github.com/lastpass/lastpass-cli) — uses
+  `lpass show --totp <name>`
+
+For auto-detection to work, name your npm vault entry `npmjs.com` (or
+`npm`, or `npmjs` — the script tries each in order) and make sure the
+respective CLI is installed and signed in.
+
+If your setup doesn't fit the convention above, set `NPM_OTP_COMMAND` to
+any shell command that prints a fresh OTP to stdout:
+
+```sh
+# 1Password with a custom item name
+export NPM_OTP_COMMAND='op item get "my npm entry" --otp'
+# LastPass with a custom item name
+export NPM_OTP_COMMAND='lpass show --totp "my npm entry"'
+# oathtool, ykman, etc. also work
+```
+
+If no OTP source is available, npm's native OTP prompt appears at publish
+time and you can type the code by hand.
+
 # Changelog
 
 ## 2.3.4
