@@ -91,6 +91,101 @@ function fetchOriginTags() {
   return null;
 }
 
+function getDefaultBranch() {
+  // Prefer the symbolic ref on origin (set by `git clone` and `git remote set-head`).
+  const symRes = safeRun('git symbolic-ref --short refs/remotes/origin/HEAD');
+  if (symRes.ok) {
+    const ref = symRes.out.trim();
+    if (ref.startsWith('origin/')) return ref.slice('origin/'.length);
+  }
+
+  // Fall back to asking the remote and caching the result locally.
+  const setHeadRes = safeRun('git remote set-head origin --auto');
+  if (setHeadRes.ok) {
+    const retry = safeRun('git symbolic-ref --short refs/remotes/origin/HEAD');
+    if (retry.ok) {
+      const ref = retry.out.trim();
+      if (ref.startsWith('origin/')) return ref.slice('origin/'.length);
+    }
+  }
+
+  // Last resort: ask GitHub via gh.
+  const ghRes = safeRun('gh repo view --json defaultBranchRef -q .defaultBranchRef.name');
+  if (ghRes.ok) {
+    const name = ghRes.out.trim();
+    if (name) return name;
+  }
+
+  return null;
+}
+
+function getCurrentBranch() {
+  const res = safeRun('git symbolic-ref --short HEAD');
+  if (res.ok) return res.out.trim();
+  return null;
+}
+
+function preflightChecks() {
+  const defaultBranch = getDefaultBranch();
+  if (!defaultBranch) {
+    throw new Error(
+      'Could not determine the default branch. Make sure this repo has an "origin" remote.',
+    );
+  }
+
+  const currentBranch = getCurrentBranch();
+  if (!currentBranch) {
+    throw new Error(
+      'HEAD is detached. Check out the default branch before releasing.',
+    );
+  }
+  if (currentBranch !== defaultBranch) {
+    throw new Error(
+      `Releases must be made from the default branch ("${defaultBranch}"), but the current branch is "${currentBranch}". Switch branches and try again.`,
+    );
+  }
+
+  const statusRes = safeRun('git status --porcelain');
+  if (!statusRes.ok) {
+    throw new Error('Failed to run `git status`.');
+  }
+  if (statusRes.out.trim()) {
+    throw new Error(
+      'Working tree is not clean. Commit, stash, or discard your changes before releasing.',
+    );
+  }
+
+  // Verify local branch is in sync with origin.
+  const localRes = safeRun('git rev-parse HEAD');
+  const remoteRes = safeRun(`git rev-parse origin/${defaultBranch}`);
+  if (localRes.ok && remoteRes.ok) {
+    const local = localRes.out.trim();
+    const remote = remoteRes.out.trim();
+    if (local !== remote) {
+      const aheadRes = safeRun(
+        `git rev-list --count origin/${defaultBranch}..HEAD`,
+      );
+      const behindRes = safeRun(
+        `git rev-list --count HEAD..origin/${defaultBranch}`,
+      );
+      const ahead = aheadRes.ok ? parseInt(aheadRes.out.trim(), 10) : 0;
+      const behind = behindRes.ok ? parseInt(behindRes.out.trim(), 10) : 0;
+      if (behind > 0) {
+        throw new Error(
+          `Local "${defaultBranch}" is behind origin/${defaultBranch} by ${behind} commit(s). Pull before releasing.`,
+        );
+      }
+      if (ahead > 0) {
+        throw new Error(
+          `Local "${defaultBranch}" is ahead of origin/${defaultBranch} by ${ahead} commit(s). Push or reset before releasing.`,
+        );
+      }
+    }
+  }
+
+  return { defaultBranch };
+}
+
 function getLastVersionTag() {
   const res = safeRun(
     'git describe --tags --match "v[0-9]*.[0-9]*.[0-9]*" --abbrev=0',
@@ -322,6 +417,7 @@ function parseArgs() {
     const privateFieldMissing = isPublicPackage && pkg.private === undefined;
 
     fetchOriginTags();
+    const { defaultBranch } = preflightChecks();
     const lastVersionTag = getLastVersionTag();
     const raw = getCommitRange(lastVersionTag);
     let commits = parseCommits(raw);
@@ -420,7 +516,7 @@ function parseArgs() {
         );
       }
       console.log(`  ${step++}. npm version ${finalBump} -m "%s"`);
-      console.log(`  ${step++}. git push origin main --tags`);
+      console.log(`  ${step++}. git push origin ${defaultBranch} --tags`);
       console.log(`  ${step++}. gh release create v${newVersion} --title "v${newVersion}" --notes-file <entry>`);
       if (isPublicPackage) {
         console.log(`  ${step++}. npm whoami (run npm login if not authenticated)`);
@@ -459,7 +555,7 @@ function parseArgs() {
     run(`npm version ${finalBump} -m "%s"`);
 
     // Push commit and tags explicitly
-    run('git push origin main --tags');
+    run(`git push origin ${defaultBranch} --tags`);
 
     // Create GitHub release
     const ghNotesFile = path.join(
