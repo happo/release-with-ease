@@ -195,13 +195,22 @@ function getLastVersionTag() {
 }
 
 function getCommitRange(lastTag) {
+  // --first-parent walks only the mainline of history: for a PR merged via
+  // a merge commit, that means the merge commit itself shows up but the
+  // individual commits it brought in (only reachable through the merge's
+  // second parent) do not. Direct commits to the default branch, and
+  // squash-merged PRs (which are already a single commit), are unaffected.
+  // This keeps release notes focused on one entry per PR/commit instead of
+  // every intermediate commit a PR happened to accumulate.
   if (lastTag) {
     return safeRun(
-      `git log ${lastTag}..HEAD --pretty=format:%H%x1f%s%x1f%b%x1e`,
+      `git log --first-parent ${lastTag}..HEAD --pretty=format:%H%x1f%s%x1f%b%x1e`,
     ).out;
   }
   // No tag yet; use last 100 commits
-  return safeRun('git log -n 100 --pretty=format:%H%x1f%s%x1f%b%x1e').out;
+  return safeRun(
+    'git log --first-parent -n 100 --pretty=format:%H%x1f%s%x1f%b%x1e',
+  ).out;
 }
 
 function parseCommits(raw) {
@@ -248,23 +257,48 @@ function fetchGitHubMeta(commits, lastTag) {
     }
   }
 
-  // Merge commit SHA → PR number via pr list (best-effort)
+  // Merge commit SHA → PR info via pr list (best-effort). We key off the
+  // actual merge/squash commit SHA on the default branch so this works for
+  // both "Create a merge commit" and "Squash and merge" workflows.
   const shaToPr = {};
   const prRes = safeRun(
-    `gh pr list --state merged --limit 100 --json number,mergeCommit --jq '.[] | select(.mergeCommit != null) | [.mergeCommit.oid, (.number | tostring)] | @tsv'`,
+    `gh pr list --state merged --limit 100 --json number,mergeCommit,title,body,author`,
   );
   if (prRes.ok) {
-    for (const line of prRes.out.trim().split('\n').filter(Boolean)) {
-      const [sha, num] = line.split('\t');
-      if (sha && num) shaToPr[sha] = parseInt(num, 10);
+    try {
+      for (const pr of JSON.parse(prRes.out)) {
+        if (pr.mergeCommit?.oid) {
+          shaToPr[pr.mergeCommit.oid] = pr;
+        }
+      }
+    } catch {
+      // Malformed JSON from gh; fall back to per-commit heuristics below.
     }
   }
 
-  return commits.map(c => ({
-    ...c,
-    githubLogin: shaToLogin[c.hash] || null,
-    prNumber: shaToPr[c.hash] ?? extractPrNumber(c.subject, c.body),
-  }));
+  return commits.map(c => {
+    const pr = shaToPr[c.hash];
+    if (pr) {
+      // Prefer the PR's own title/description over the raw commit message.
+      // For real merge commits this replaces the generic "Merge pull
+      // request #N from owner/branch" subject; for both merge and squash
+      // commits it also replaces individual/internal commit wording (e.g.
+      // fixup commits) with the summary already written for the PR, so we
+      // don't duplicate or leak commit-level detail into release notes.
+      return {
+        ...c,
+        subject: pr.title || c.subject,
+        body: pr.body || c.body,
+        githubLogin: pr.author?.login || shaToLogin[c.hash] || null,
+        prNumber: pr.number,
+      };
+    }
+    return {
+      ...c,
+      githubLogin: shaToLogin[c.hash] || null,
+      prNumber: extractPrNumber(c.subject, c.body),
+    };
+  });
 }
 
 async function askClaudeForRelease(commits, isPublicPackage = false) {
