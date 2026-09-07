@@ -85,6 +85,11 @@ time and you can type the code by hand.
 
 # Changelog
 
+## 2.5.0
+
+- Improve release notes generation to use PR merge-commit info instead of individual commits, reducing noise and duplication [by @trotzig in #17]
+- Add pnpm lockfile to repository [by @trotzig]
+
 ## 2.4.0
 
 - Auto-detect npm OTP from 1Password or LastPass CLI to streamline 2FA releases [by @lencioni in #15]
