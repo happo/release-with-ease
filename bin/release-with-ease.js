@@ -12,8 +12,9 @@
     - ANTHROPIC_API_KEY environment variable must be set
 
   Usage:
-    npx release-with-ease           # Normal release
-    npx release-with-ease --dry-run # Preview what would be done
+    npx release-with-ease            # Normal release
+    npx release-with-ease --dry-run  # Preview what would be done
+    npx release-with-ease --path .   # Only analyze commits touching a path
 */
 
 const { execSync } = require('child_process');
@@ -194,7 +195,28 @@ function getLastVersionTag() {
   return null;
 }
 
-function getCommitRange(lastTag) {
+/**
+ * Quotes a pathspec for the shell. The git commands below go through
+ * `execSync`, so a path containing a space — or a glob the shell would expand
+ * before git ever saw it — has to be quoted.
+ */
+function shellQuote(value) {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * The `-- <pathspec>` suffix for the log commands, or nothing at all, which
+ * is the whole-repository default. Pathspecs are interpreted relative to the
+ * current directory — the package being released — so `.` means "this
+ * package" without anyone having to know where the repository root is.
+ */
+function pathspecSuffix(paths) {
+  if (!paths.length) return '';
+  return ` -- ${paths.map(shellQuote).join(' ')}`;
+}
+
+function getCommitRange(lastTag, paths = []) {
+  const pathspec = pathspecSuffix(paths);
   // --first-parent walks only the mainline of history: for a PR merged via
   // a merge commit, that means the merge commit itself shows up but the
   // individual commits it brought in (only reachable through the merge's
@@ -202,14 +224,19 @@ function getCommitRange(lastTag) {
   // squash-merged PRs (which are already a single commit), are unaffected.
   // This keeps release notes focused on one entry per PR/commit instead of
   // every intermediate commit a PR happened to accumulate.
+  //
+  // A pathspec narrows that to the mainline commits that touched the given
+  // paths. Under --first-parent, a merge commit is compared against its first
+  // parent only, so a PR that changed the path still shows up as its merge
+  // commit — the same one entry per PR the range above produces.
   if (lastTag) {
     return safeRun(
-      `git log --first-parent ${lastTag}..HEAD --pretty=format:%H%x1f%s%x1f%b%x1e`,
+      `git log --first-parent ${lastTag}..HEAD --pretty=format:%H%x1f%s%x1f%b%x1e${pathspec}`,
     ).out;
   }
   // No tag yet; use last 100 commits
   return safeRun(
-    'git log --first-parent -n 100 --pretty=format:%H%x1f%s%x1f%b%x1e',
+    `git log --first-parent -n 100 --pretty=format:%H%x1f%s%x1f%b%x1e${pathspec}`,
   ).out;
 }
 
@@ -423,12 +450,92 @@ function hasReadmeChangelog() {
 function parseArgs() {
   const args = process.argv.slice(2);
   const dryRun = args.includes('--dry-run');
-  return { dryRun };
+  const paths = [];
+
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === '--path' || arg === '--pathspec') {
+      const value = args[i + 1];
+      // A missing value would otherwise swallow the next flag, or nothing at
+      // all, and release the whole repository as if no path was ever asked for.
+      if (!value || value.startsWith('-')) {
+        console.error(`❌ ${arg} needs a value, e.g. ${arg} packages/cli`);
+        process.exit(1);
+      }
+      paths.push(value);
+      i += 1;
+    } else if (/^--path(spec)?=/.test(arg)) {
+      const value = arg.slice(arg.indexOf('=') + 1);
+      if (!value) {
+        console.error(`❌ ${arg} needs a value, e.g. --path=packages/cli`);
+        process.exit(1);
+      }
+      paths.push(value);
+    }
+  }
+
+  return { dryRun, paths };
+}
+
+/**
+ * `"release-with-ease": { "paths": [...] }` in the package.json being
+ * released, used when no --path flag was passed. A package in a monorepo
+ * wants the same pathspec on every release, and forgetting the flag fails
+ * silently — release notes covering the whole repository read as perfectly
+ * plausible — so it belongs in the manifest rather than in whatever the
+ * publisher remembers to type.
+ */
+function configuredPaths(pkg) {
+  const config = pkg['release-with-ease'];
+  const raw = config?.paths ?? config?.path;
+  if (raw === undefined || raw === null) return [];
+
+  const list = (Array.isArray(raw) ? raw : [raw]).map(entry =>
+    typeof entry === 'string' ? entry.trim() : entry,
+  );
+  if (!list.length || list.some(entry => typeof entry !== 'string' || !entry)) {
+    console.error(
+      '❌ "release-with-ease".paths in package.json must be a path, or an array of paths.',
+    );
+    process.exit(1);
+  }
+  return list;
+}
+
+function realpath(target) {
+  try {
+    return fs.realpathSync(target);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A package released from a subdirectory is a package in a monorepo, and one
+ * almost never wants its release notes written from the whole repository's
+ * history. Nothing about that outcome looks wrong once it has happened, so
+ * say it up front rather than leaving it to be spotted in the editor.
+ */
+function warnIfUnscopedSubdirectory(paths, pkg) {
+  if (paths.length) return;
+  const rootRes = safeRun('git rev-parse --show-toplevel');
+  if (!rootRes.ok) return;
+  const root = realpath(rootRes.out.trim());
+  if (!root || root === realpath(process.cwd())) return;
+
+  console.log(
+    `\nℹ️  ${
+      pkg.name || 'This package'
+    } lives in a subdirectory, but commits are being analyzed from the whole repository.`,
+  );
+  console.log(
+    '   Pass --path . (or add "release-with-ease": { "paths": ["."] } to package.json) to limit them to this package.',
+  );
 }
 
 (async function main() {
   try {
-    const { dryRun } = parseArgs();
+    const { dryRun, paths: pathArgs } = parseArgs();
 
     // Check for required environment variable early
     if (!process.env.ANTHROPIC_API_KEY) {
@@ -449,21 +556,29 @@ function parseArgs() {
     const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
     const isPublicPackage = pkg.private !== true && pkg.private !== 'true';
     const privateFieldMissing = isPublicPackage && pkg.private === undefined;
+    const paths = pathArgs.length ? pathArgs : configuredPaths(pkg);
 
     fetchOriginTags();
     const { defaultBranch } = preflightChecks();
     const lastVersionTag = getLastVersionTag();
-    const raw = getCommitRange(lastVersionTag);
+    warnIfUnscopedSubdirectory(paths, pkg);
+    const raw = getCommitRange(lastVersionTag, paths);
     let commits = parseCommits(raw);
     if (!commits.length) {
-      console.log('No commits found since last tag. Aborting.');
+      // With a pathspec this is the ordinary "nothing to release here yet"
+      // outcome rather than a broken repository, so name what was looked at.
+      console.log(
+        `No commits found since ${lastVersionTag || 'the start of history'}${
+          paths.length ? ` touching ${paths.join(', ')}` : ''
+        }. Aborting.`,
+      );
       process.exit(1);
     }
 
     console.log(
       `\n📊 Analyzing ${commits.length} commits since ${
         lastVersionTag || 'beginning'
-      }:`,
+      }${paths.length ? ` (limited to ${paths.join(', ')})` : ''}:`,
     );
     commits.forEach(commit => {
       const shortSha = commit.hash.substring(0, 7);

@@ -17,6 +17,53 @@ If you just want to preview the changes that would be made, use the `--dry-run` 
 npx release-with-ease --dry-run
 ```
 
+The script reads `package.json` and `README.md` from the current directory, so
+run it from the package you want to release.
+
+# Monorepos
+
+By default the release notes are written from every commit on the mainline
+since the last `v*` tag — the whole repository. In a monorepo that means a
+release of one package is described using changes to all the others, and
+nothing about the result looks wrong afterwards.
+
+Pass `--path` to limit the commits to the ones that touched a path. It takes a
+git pathspec, interpreted relative to the current directory, and can be
+repeated:
+
+```sh
+cd packages/cli
+npx release-with-ease --path .
+
+# or, from anywhere in the repository
+npx release-with-ease --path packages/cli --path packages/shared
+```
+
+Since a package wants the same pathspec on every release, it is usually better
+to put it in the `package.json` being released:
+
+```json
+{
+  "name": "my-cli",
+  "release-with-ease": { "paths": ["."] }
+}
+```
+
+A `--path` flag on the command line overrides the configured paths. The script
+warns when it is releasing a package from a subdirectory with no paths set at
+all, since that is nearly always an oversight rather than a choice.
+
+Two things stay repository-wide, because git tags are:
+
+- The last release is found with `git describe --match "v[0-9]*.[0-9]*.[0-9]*"`,
+  and `npm version` creates tags of the same shape. Releasing two packages from
+  one repository would have them share a version series.
+- The GitHub release created at the end covers the tag, not the path.
+
+So this works well for a monorepo with one publishable package, and needs
+per-package tag prefixes — which the script does not support yet — for more
+than one.
+
 # Prerequisites
 
 The script requires these environment variables to be set:
