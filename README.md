@@ -132,6 +132,13 @@ time and you can type the code by hand.
 
 # Changelog
 
+## 2.6.0
+
+- Add `--path` flag to limit release notes to a specific pathspec, useful for monorepos [by @trotzig in #18]
+- Support `--pathspec` as an alias for `--path`
+- Allow repeatable `--path` arguments for multiple pathspecs
+- Interpret paths relative to current directory for easier monorepo workflows
+
 ## 2.5.0
 
 - Improve release notes generation to use PR merge-commit info instead of individual commits, reducing noise and duplication [by @trotzig in #17]
