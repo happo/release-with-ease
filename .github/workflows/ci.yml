@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The tests run `.ts` straight from source through Node's type
+        # stripping, which needs 22.18 or newer. The published package is
+        # compiled JavaScript and is checked against the `engines` floor by
+        # the `smoke` job below.
+        node: ['22', '24']
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-env
+        with:
+          node-version: ${{ matrix.node }}
+      - run: pnpm test
+
+  typecheck:
+    name: Type-check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-env
+      - run: pnpm tsc
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-env
+      - run: pnpm build
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dist
+          path: dist/
+          retention-days: 1
+
+  smoke:
+    # The bin shim is what `npx release-with-ease` runs, and it only ever
+    # loads compiled output — so check that the whole import chain parses and
+    # runs on the version `engines` promises, not just on the newest Node.
+    #
+    # This job does not use setup-env: pnpm itself needs a newer Node than the
+    # floor being tested. Installing and building happen in `build`, and only
+    # the compiled output crosses over — which is also what npm ships.
+    name: Run the built CLI on the oldest supported Node
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Read the floor out of `engines` rather than repeating it here, so
+      # raising the minimum in package.json moves this check with it.
+      - name: Read the engines floor
+        id: engines
+        run: |
+          floor=$(node -p "require('./package.json').engines.node.replace(/[^0-9.]/g, '')")
+          echo "Minimum supported Node: $floor"
+          echo "node=$floor" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: ${{ steps.engines.outputs.node }}
+          # This job deliberately has no package manager — it runs only the
+          # built output — so there is nothing for setup-node to cache, and
+          # looking for one is what it would fail on.
+          package-manager-cache: false
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist/
+
+      - name: Run the compiled CLI
+        run: |
+          set -e
+          node --version
+          output=$(node bin/release-with-ease.js --dry-run 2>&1) && status=0 || status=$?
+          echo "$output"
+          if [ "$status" -ne 1 ]; then
+            echo "Expected exit status 1, got $status" >&2
+            exit 1
+          fi
+          case "$output" in
+            *ANTHROPIC_API_KEY*) ;;
+            *) echo "CLI did not reach its first check" >&2; exit 1 ;;
+          esac

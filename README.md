@@ -20,6 +20,33 @@ npx release-with-ease --dry-run
 The script reads `package.json` and `README.md` from the current directory, so
 run it from the package you want to release.
 
+# How commits become release notes
+
+The script walks the mainline with `git log --first-parent`, so each merged
+pull request contributes one entry rather than every commit it accumulated
+along the way. For public packages it then asks `gh` which pull request each
+mainline commit came from and uses that pull request's title, description and
+author, which reads better than `Merge pull request #123 from owner/branch`.
+
+GitHub merges a **stacked pull request** as a single commit on the mainline,
+and every pull request in the stack reports that same commit as its merge
+commit. The script expands such a commit back into one entry per pull request,
+bottom of the stack first, so the ones underneath the top get described instead
+of disappearing into their neighbour's merge commit. With `--path` set, each
+pull request in the stack is matched against the pathspec on its own, so a
+stack that spans several packages only shows up where it belongs.
+
+The order comes from the branch each pull request was based on, but only after
+git confirms the commits line up that way and that all of them are part of the
+merge. Branch names can be reused, and a branch can be pushed to after it
+merged, so where the claim doesn't check out the entries fall back to the order
+they were opened in and the pathspec is applied to the stack as a whole. That
+can leave a bullet point too many, which is easy to delete in the editor step —
+unlike a pull request credited with files it never touched.
+
+The list of entries is printed before anything is sent to Claude — worth a
+glance, since it is what the release notes are written from.
+
 # Monorepos
 
 By default the release notes are written from every commit on the mainline
@@ -129,6 +156,37 @@ export NPM_OTP_COMMAND='lpass show --totp "my npm entry"'
 
 If no OTP source is available, npm's native OTP prompt appears at publish
 time and you can type the code by hand.
+
+# Development
+
+The source is TypeScript under `src/`, compiled to `dist/` by `tsc`. The
+published `bin/release-with-ease.js` is a shim over the compiled output, so
+what `npx` runs is ordinary JavaScript and the `engines` floor holds.
+
+Node and pnpm versions are pinned in `mise.toml`, so
+[mise](https://mise.jdx.dev/) will put the right ones on your path:
+
+```sh
+mise install
+pnpm install
+pnpm test    # node --test, straight from the TypeScript sources
+pnpm tsc     # type-check everything, including the tests
+pnpm build   # compile src/ to dist/
+```
+
+Working on the package needs a newer Node than using it does: the tests run
+the TypeScript sources directly through Node's type stripping, which wants
+22.18 or newer, while the published JavaScript only needs what `engines` says.
+CI checks both.
+
+Tests use Node's built-in test runner and no test framework. Rather than
+mocking, they build real git repositories in a temporary directory and run
+real `git` against them, so the merge shapes under test — a stack landing as
+one commit, a branch behind its origin — are the shapes git actually
+produces. Where an external command has to be stood in for, it is stood in
+for at the lowest level available: `gh` is a real executable placed on `PATH`,
+and the Anthropic API is a real HTTP server on localhost reached through
+`ANTHROPIC_BASE_URL`.
 
 # Changelog
 

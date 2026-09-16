@@ -1,0 +1,12 @@
+{
+  // Tests are type-checked but never emitted: they run from source through
+  // Node's type stripping, so nothing about them belongs in `dist/`.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": []
+}

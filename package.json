@@ -2,11 +2,16 @@
   "name": "release-with-ease",
   "version": "2.6.0",
   "description": "A script to bump the version of an npm library and update release notes. Uses Claude to analyze commits.",
-  "main": "index.js",
+  "main": "dist/cli.js",
   "bin": {
     "release-with-ease": "bin/release-with-ease.js"
   },
   "scripts": {
+    "build": "tsc --build",
+    "clean": "rm -rf dist *.tsbuildinfo",
+    "tsc": "tsc --build tsconfig.test.json",
+    "test": "node --test \"src/**/*.test.ts\"",
+    "prepublishOnly": "npm run clean && npm run build",
     "release": "node --env-file-if-exists=.env bin/release-with-ease.js"
   },
   "repository": {
@@ -26,5 +31,18 @@
   "bugs": {
     "url": "https://github.com/happo/release-with-ease/issues"
   },
-  "homepage": "https://github.com/happo/release-with-ease#readme"
+  "homepage": "https://github.com/happo/release-with-ease#readme",
+  "type": "module",
+  "types": "dist/cli.d.ts",
+  "files": [
+    "bin",
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^7.0.2"
+  }
 }
