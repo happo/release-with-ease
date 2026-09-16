@@ -90,6 +90,10 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: ${{ steps.engines.outputs.node }}
+          # setup-node reads `packageManager` from package.json and would try
+          # to run pnpm to prime its cache. This job deliberately has no pnpm
+          # — it runs only the built output — so there is nothing to cache.
+          package-manager-cache: false
 
       - uses: actions/download-artifact@v4
         with:
