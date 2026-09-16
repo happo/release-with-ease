@@ -190,6 +190,14 @@ and the Anthropic API is a real HTTP server on localhost reached through
 
 # Changelog
 
+## 2.7.0
+
+- Describe every pull request in a merged stack, fixing missing changelog entries when multiple PRs are merged together [by @lencioni in #19]
+- Add comprehensive tests for stacked pull request handling
+- Add TypeScript support for improved type safety
+- Add CI jobs for automated testing and validation
+- Add Dependabot configuration for dependency management
+
 ## 2.6.0
 
 - Add `--path` flag to limit release notes to a specific pathspec, useful for monorepos [by @trotzig in #18]
