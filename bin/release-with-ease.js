@@ -265,7 +265,70 @@ function extractPrNumber(subject, body) {
   return null;
 }
 
-function fetchGitHubMeta(commits, lastTag) {
+/**
+ * Puts the pull requests that share a merge commit in the order they were
+ * written, bottom of the stack first. Each one in a stack is based on the
+ * branch of the one below it, which is enough to rebuild the chain. A shape
+ * the chain cannot explain — a fork, or a branch name deleted and reused —
+ * falls back to PR number, which is the order they were opened in.
+ */
+function orderStack(prs) {
+  if (prs.length < 2) return prs;
+
+  const byNumber = () => [...prs].sort((a, b) => a.number - b.number);
+  const heads = new Set(prs.map(pr => pr.headRefName));
+  const bottom = prs.filter(pr => !heads.has(pr.baseRefName));
+  if (bottom.length !== 1) return byNumber();
+
+  const ordered = [];
+  let current = bottom[0];
+  while (current && !ordered.includes(current)) {
+    ordered.push(current);
+    const head = current.headRefName;
+    current = prs.find(pr => pr.baseRefName === head);
+  }
+  return ordered.length === prs.length ? ordered : byNumber();
+}
+
+/**
+ * Whether one pull request in a stack touched the pathspec. `git log` has
+ * already answered that for the stack as a whole, since the stack landed as a
+ * single mainline commit; this asks the same question of each pull request's
+ * own commits, which are all present locally as ancestors of that commit.
+ * Anything git cannot answer counts as touched — an extra bullet point is
+ * easier to spot and delete than a missing one.
+ */
+function prTouchedPaths(pr, baseSha, paths) {
+  if (!pr.headRefOid || !baseSha) return true;
+  const res = safeRun(
+    `git log --oneline -n 1 ${baseSha}..${pr.headRefOid}${pathspecSuffix(paths)}`,
+  );
+  if (!res.ok) return true;
+  return Boolean(res.out.trim());
+}
+
+/**
+ * Narrows an ordered stack to the pull requests that touched the pathspec.
+ * Each one's base is the previous one's head, so walking the stack in order
+ * gives every pull request a range covering only its own commits.
+ */
+function filterStackByPaths(orderedPrs, mergeSha, paths) {
+  if (!paths.length || orderedPrs.length < 2) return orderedPrs;
+
+  const firstParent = safeRun(`git rev-parse ${mergeSha}^1`);
+  let baseSha = firstParent.ok ? firstParent.out.trim() : null;
+
+  const kept = [];
+  for (const pr of orderedPrs) {
+    if (prTouchedPaths(pr, baseSha, paths)) kept.push(pr);
+    if (pr.headRefOid) baseSha = pr.headRefOid;
+  }
+  // The mainline commit did touch the pathspec, so an unattributed stack is
+  // a better answer than no entry at all.
+  return kept.length ? kept : orderedPrs;
+}
+
+function fetchGitHubMeta(commits, lastTag, paths = []) {
   const repoRes = safeRun('gh repo view --json nameWithOwner -q .nameWithOwner');
   if (!repoRes.ok) return commits;
   const [owner, repo] = repoRes.out.trim().split('/');
@@ -284,47 +347,61 @@ function fetchGitHubMeta(commits, lastTag) {
     }
   }
 
-  // Merge commit SHA → PR info via pr list (best-effort). We key off the
-  // actual merge/squash commit SHA on the default branch so this works for
-  // both "Create a merge commit" and "Squash and merge" workflows.
-  const shaToPr = {};
+  // Merge commit SHA → PRs via pr list (best-effort). We key off the actual
+  // merge/squash commit SHA on the default branch so this works for both
+  // "Create a merge commit" and "Squash and merge" workflows.
+  //
+  // One SHA can carry several pull requests. GitHub merges a stacked pull
+  // request as a single commit on the mainline, and every pull request in
+  // the stack reports that one commit as its merge commit — so keying a
+  // single PR per SHA would silently drop all but one of them.
+  const shaToPrs = {};
   const prRes = safeRun(
-    `gh pr list --state merged --limit 100 --json number,mergeCommit,title,body,author`,
+    `gh pr list --state merged --limit 100 --json number,mergeCommit,title,body,author,baseRefName,headRefName,headRefOid`,
   );
   if (prRes.ok) {
     try {
       for (const pr of JSON.parse(prRes.out)) {
-        if (pr.mergeCommit?.oid) {
-          shaToPr[pr.mergeCommit.oid] = pr;
-        }
+        const oid = pr.mergeCommit?.oid;
+        if (!oid) continue;
+        if (!shaToPrs[oid]) shaToPrs[oid] = [];
+        shaToPrs[oid].push(pr);
       }
     } catch {
       // Malformed JSON from gh; fall back to per-commit heuristics below.
     }
   }
 
-  return commits.map(c => {
-    const pr = shaToPr[c.hash];
-    if (pr) {
-      // Prefer the PR's own title/description over the raw commit message.
-      // For real merge commits this replaces the generic "Merge pull
-      // request #N from owner/branch" subject; for both merge and squash
-      // commits it also replaces individual/internal commit wording (e.g.
-      // fixup commits) with the summary already written for the PR, so we
-      // don't duplicate or leak commit-level detail into release notes.
-      return {
-        ...c,
-        subject: pr.title || c.subject,
-        body: pr.body || c.body,
-        githubLogin: pr.author?.login || shaToLogin[c.hash] || null,
-        prNumber: pr.number,
-      };
+  return commits.flatMap(c => {
+    const prs = shaToPrs[c.hash];
+    if (!prs || !prs.length) {
+      return [
+        {
+          ...c,
+          githubLogin: shaToLogin[c.hash] || null,
+          prNumber: extractPrNumber(c.subject, c.body),
+        },
+      ];
     }
-    return {
+
+    // Prefer each PR's own title/description over the raw commit message.
+    // For real merge commits this replaces the generic "Merge pull
+    // request #N from owner/branch" subject; for both merge and squash
+    // commits it also replaces individual/internal commit wording (e.g.
+    // fixup commits) with the summary already written for the PR, so we
+    // don't duplicate or leak commit-level detail into release notes.
+    //
+    // A stack contributes one entry per pull request, so the ones below the
+    // top of it get described instead of disappearing into their neighbour's
+    // merge commit.
+    const stack = filterStackByPaths(orderStack(prs), c.hash, paths);
+    return stack.map(pr => ({
       ...c,
-      githubLogin: shaToLogin[c.hash] || null,
-      prNumber: extractPrNumber(c.subject, c.body),
-    };
+      subject: pr.title || c.subject,
+      body: pr.body || c.body,
+      githubLogin: pr.author?.login || shaToLogin[c.hash] || null,
+      prNumber: pr.number,
+    }));
   });
 }
 
@@ -575,19 +652,29 @@ function warnIfUnscopedSubdirectory(paths, pkg) {
       process.exit(1);
     }
 
+    // Resolve pull requests before printing the list: a stack merged as one
+    // commit turns into one entry per pull request here, and the printed list
+    // is the only chance to notice that before the release notes are written.
+    if (isPublicPackage) {
+      commits = fetchGitHubMeta(commits, lastVersionTag, paths);
+    }
+
     console.log(
-      `\n📊 Analyzing ${commits.length} commits since ${
-        lastVersionTag || 'beginning'
-      }${paths.length ? ` (limited to ${paths.join(', ')})` : ''}:`,
+      `\n📊 Analyzing ${commits.length} change${
+        commits.length === 1 ? '' : 's'
+      } since ${lastVersionTag || 'beginning'}${
+        paths.length ? ` (limited to ${paths.join(', ')})` : ''
+      }:`,
     );
     commits.forEach(commit => {
       const shortSha = commit.hash.substring(0, 7);
-      console.log(`  ${shortSha} ${commit.subject}`);
+      // Squash-merge subjects already end in "(#123)"; don't say it twice.
+      const pr =
+        commit.prNumber && !commit.subject.includes(`#${commit.prNumber}`)
+          ? ` (#${commit.prNumber})`
+          : '';
+      console.log(`  ${shortSha} ${commit.subject}${pr}`);
     });
-
-    if (isPublicPackage) {
-      commits = fetchGitHubMeta(commits, lastVersionTag);
-    }
 
     console.log('\nWaiting for Claude to analyze commits...');
 

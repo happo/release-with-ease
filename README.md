@@ -20,6 +20,25 @@ npx release-with-ease --dry-run
 The script reads `package.json` and `README.md` from the current directory, so
 run it from the package you want to release.
 
+# How commits become release notes
+
+The script walks the mainline with `git log --first-parent`, so each merged
+pull request contributes one entry rather than every commit it accumulated
+along the way. For public packages it then asks `gh` which pull request each
+mainline commit came from and uses that pull request's title, description and
+author, which reads better than `Merge pull request #123 from owner/branch`.
+
+GitHub merges a **stacked pull request** as a single commit on the mainline,
+and every pull request in the stack reports that same commit as its merge
+commit. The script expands such a commit back into one entry per pull request,
+bottom of the stack first, so the ones underneath the top get described instead
+of disappearing into their neighbour's merge commit. With `--path` set, each
+pull request in the stack is matched against the pathspec on its own, so a
+stack that spans several packages only shows up where it belongs.
+
+The list of entries is printed before anything is sent to Claude — worth a
+glance, since it is what the release notes are written from.
+
 # Monorepos
 
 By default the release notes are written from every commit on the mainline
