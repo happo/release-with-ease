@@ -2,6 +2,7 @@ import assert from 'node:assert';
 import { afterEach, describe, it } from 'node:test';
 
 import {
+  chainByBranchNames,
   extractPrNumber,
   fetchGitHubMeta,
   filterStackByPaths,
@@ -51,9 +52,9 @@ describe('extractPrNumber', () => {
   });
 });
 
-describe('orderStack', () => {
+describe('chainByBranchNames', () => {
   it('leaves a single pull request alone', () => {
-    assert.deepStrictEqual(numbers(orderStack([pr({ number: 7 })])), [7]);
+    assert.deepStrictEqual(numbers(chainByBranchNames([pr({ number: 7 })]) ?? []), [7]);
   });
 
   it('orders a chain bottom-first regardless of the order it arrives in', () => {
@@ -62,7 +63,7 @@ describe('orderStack', () => {
     const middle = pr({ number: 2, baseRefName: 'a', headRefName: 'b' });
     const top = pr({ number: 3, baseRefName: 'b', headRefName: 'c' });
 
-    assert.deepStrictEqual(numbers(orderStack([top, middle, bottom])), [1, 2, 3]);
+    assert.deepStrictEqual(numbers(chainByBranchNames([top, middle, bottom]) ?? []), [1, 2, 3]);
   });
 
   it('does not assume PR number matches stack order', () => {
@@ -70,29 +71,29 @@ describe('orderStack', () => {
     const bottom = pr({ number: 9, baseRefName: 'main', headRefName: 'a' });
     const top = pr({ number: 4, baseRefName: 'a', headRefName: 'b' });
 
-    assert.deepStrictEqual(numbers(orderStack([top, bottom])), [9, 4]);
+    assert.deepStrictEqual(numbers(chainByBranchNames([top, bottom]) ?? []), [9, 4]);
   });
 
-  it('falls back to PR number when the chain forks', () => {
+  it('is null when the chain forks', () => {
     const bottom = pr({ number: 1, baseRefName: 'main', headRefName: 'a' });
     const one = pr({ number: 3, baseRefName: 'a', headRefName: 'b' });
     const other = pr({ number: 2, baseRefName: 'a', headRefName: 'c' });
 
-    assert.deepStrictEqual(numbers(orderStack([one, other, bottom])), [1, 2, 3]);
+    assert.strictEqual(chainByBranchNames([one, other, bottom]), null);
   });
 
-  it('falls back to PR number when there is no bottom', () => {
+  it('is null when there is no bottom', () => {
     const a = pr({ number: 5, baseRefName: 'b', headRefName: 'a' });
     const b = pr({ number: 2, baseRefName: 'a', headRefName: 'b' });
 
-    assert.deepStrictEqual(numbers(orderStack([a, b])), [2, 5]);
+    assert.strictEqual(chainByBranchNames([a, b]), null);
   });
 
-  it('falls back to PR number for unrelated pull requests sharing a commit', () => {
+  it('is null for unrelated pull requests sharing a commit', () => {
     const a = pr({ number: 8, baseRefName: 'main', headRefName: 'a' });
     const b = pr({ number: 3, baseRefName: 'main', headRefName: 'b' });
 
-    assert.deepStrictEqual(numbers(orderStack([a, b])), [3, 8]);
+    assert.strictEqual(chainByBranchNames([a, b]), null);
   });
 });
 
@@ -144,35 +145,40 @@ describe('against a real merged stack', () => {
     it('accepts a chain git can confirm', () => {
       const { stack } = buildStack();
       assert.ok(
-        isVerifiedChain([
-          { headRefOid: stack.bottomHeadSha },
-          { headRefOid: stack.topHeadSha },
-        ]),
+        isVerifiedChain(
+          [{ headRefOid: stack.bottomHeadSha }, { headRefOid: stack.topHeadSha }],
+          stack.mergeSha,
+        ),
       );
     });
 
     it('rejects the chain in the wrong order', () => {
       const { stack } = buildStack();
       assert.ok(
-        !isVerifiedChain([
-          { headRefOid: stack.topHeadSha },
-          { headRefOid: stack.bottomHeadSha },
-        ]),
+        !isVerifiedChain(
+          [{ headRefOid: stack.topHeadSha }, { headRefOid: stack.bottomHeadSha }],
+          stack.mergeSha,
+        ),
       );
     });
 
     it('rejects a pull request with no known head commit', () => {
       const { stack } = buildStack();
-      assert.ok(!isVerifiedChain([{ headRefOid: stack.bottomHeadSha }, { headRefOid: '' }]));
+      assert.ok(
+        !isVerifiedChain(
+          [{ headRefOid: stack.bottomHeadSha }, { headRefOid: '' }],
+          stack.mergeSha,
+        ),
+      );
     });
 
     it('rejects a head commit git has never heard of', () => {
       const { stack } = buildStack();
       assert.ok(
-        !isVerifiedChain([
-          { headRefOid: stack.bottomHeadSha },
-          { headRefOid: '0'.repeat(40) },
-        ]),
+        !isVerifiedChain(
+          [{ headRefOid: stack.bottomHeadSha }, { headRefOid: '0'.repeat(40) }],
+          stack.mergeSha,
+        ),
       );
     });
 
@@ -183,24 +189,85 @@ describe('against a real merged stack', () => {
       const oneHead = repo.commit({ 'one.js': '1' }, 'One');
       repo.git('checkout', '-b', 'two', 'main');
       const twoHead = repo.commit({ 'two.js': '2' }, 'Two');
+      repo.git('checkout', 'main');
+      repo.git('merge', '--no-ff', 'two', '-m', 'Merge two');
 
-      assert.ok(!isVerifiedChain([{ headRefOid: oneHead }, { headRefOid: twoHead }]));
+      assert.ok(
+        !isVerifiedChain(
+          [{ headRefOid: oneHead }, { headRefOid: twoHead }],
+          repo.sha('HEAD'),
+        ),
+      );
+    });
+
+    it('rejects a head that moved on after the merge', () => {
+      // headRefOid is where the branch head is now, not where it was when it
+      // merged. Commits pushed afterwards never landed in this release.
+      const { repo, stack } = buildStack();
+      repo.git('checkout', stack.topBranch);
+      const movedOn = repo.commit({ 'src/later.js': 'later' }, 'Pushed after merging');
+      repo.git('checkout', 'main');
+
+      assert.ok(
+        !isVerifiedChain(
+          [{ headRefOid: stack.bottomHeadSha }, { headRefOid: movedOn }],
+          stack.mergeSha,
+        ),
+      );
+    });
+  });
+
+  describe('orderStack', () => {
+    it('vouches for a chain git confirms, bottom first', () => {
+      const { stack } = buildStack();
+      const ordered = orderStack(stackPrs(stack), stack.mergeSha);
+
+      assert.strictEqual(ordered.verified, true);
+      assert.deepStrictEqual(numbers(ordered.prs), [1, 2]);
+    });
+
+    it('falls back to PR number, unverified, when the branch names lie', () => {
+      // The names spell out main -> allowlist -> webrtc, but the commit the
+      // bottom one points at is not in this merge at all.
+      const { stack } = buildStack();
+      const lying = stackPrs(stack).map(p =>
+        p.number === 1 ? { ...p, headRefOid: '0'.repeat(40) } : p,
+      );
+      const ordered = orderStack(lying, stack.mergeSha);
+
+      assert.strictEqual(ordered.verified, false);
+      assert.deepStrictEqual(numbers(ordered.prs), [1, 2]);
+    });
+
+    it('falls back to PR number, unverified, for unrelated pull requests', () => {
+      const { stack } = buildStack();
+      const unrelated = stackPrs(stack).map(p => ({ ...p, baseRefName: 'main' }));
+      const ordered = orderStack(unrelated, stack.mergeSha);
+
+      assert.strictEqual(ordered.verified, false);
+      assert.deepStrictEqual(numbers(ordered.prs), [1, 2]);
+    });
+
+    it('does not claim to have verified a lone pull request', () => {
+      const { stack } = buildStack();
+      const [top] = stackPrs(stack);
+      const ordered = orderStack([top!], stack.mergeSha);
+
+      assert.strictEqual(ordered.verified, false);
+      assert.deepStrictEqual(numbers(ordered.prs), [2]);
     });
   });
 
   describe('filterStackByPaths', () => {
     it('keeps the whole stack when no pathspec is in play', () => {
       const { stack } = buildStack();
-      const ordered = orderStack(stackPrs(stack));
-      assert.deepStrictEqual(
-        numbers(filterStackByPaths(ordered, stack.mergeSha, [])),
-        [1, 2],
-      );
+      const ordered = orderStack(stackPrs(stack), stack.mergeSha);
+      assert.deepStrictEqual(numbers(filterStackByPaths(ordered, stack.mergeSha, [])), [1, 2]);
     });
 
     it('keeps only the pull request that touched the path', () => {
       const { stack } = buildStack();
-      const ordered = orderStack(stackPrs(stack));
+      const ordered = orderStack(stackPrs(stack), stack.mergeSha);
 
       assert.deepStrictEqual(
         numbers(filterStackByPaths(ordered, stack.mergeSha, ['src/allowlist.js'])),
@@ -214,23 +281,39 @@ describe('against a real merged stack', () => {
 
     it('keeps both when both touched the path', () => {
       const { stack } = buildStack();
-      const ordered = orderStack(stackPrs(stack));
+      const ordered = orderStack(stackPrs(stack), stack.mergeSha);
       assert.deepStrictEqual(
         numbers(filterStackByPaths(ordered, stack.mergeSha, ['src/shared.js'])),
         [1, 2],
       );
     });
 
-    it('leaves a stack whole when git cannot verify the chain', () => {
+    it('will not cut ranges from an order git did not vouch for', () => {
       const { stack } = buildStack();
-      // Ordering still succeeds from the branch names, but the head commit is
-      // not one git can place, so no range is safe to cut.
-      const ordered = orderStack(stackPrs(stack)).map(p =>
+      // The prs are in the right order, but nothing verified that, so the
+      // ranges between them are not something to trust.
+      const unverified = { prs: orderStack(stackPrs(stack), stack.mergeSha).prs, verified: false };
+
+      assert.deepStrictEqual(
+        numbers(filterStackByPaths(unverified, stack.mergeSha, ['src/webrtc.js'])),
+        [1, 2],
+      );
+    });
+
+    it('leaves a stack whole when a head commit cannot be placed', () => {
+      const { stack } = buildStack();
+      const lying = stackPrs(stack).map(p =>
         p.number === 1 ? { ...p, headRefOid: '0'.repeat(40) } : p,
       );
 
       assert.deepStrictEqual(
-        numbers(filterStackByPaths(ordered, stack.mergeSha, ['src/webrtc.js'])),
+        numbers(
+          filterStackByPaths(
+            orderStack(lying, stack.mergeSha),
+            stack.mergeSha,
+            ['src/webrtc.js'],
+          ),
+        ),
         [1, 2],
       );
     });
@@ -256,7 +339,7 @@ describe('against a real merged stack', () => {
       ];
 
       assert.deepStrictEqual(
-        numbers(filterStackByPaths(orderStack(siblings), mergeSha, ['src/two.js'])),
+        numbers(filterStackByPaths(orderStack(siblings, mergeSha), mergeSha, ['src/two.js'])),
         [1, 2],
       );
     });

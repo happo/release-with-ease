@@ -30,22 +30,29 @@ export function extractPrNumber(subject: string, body: string): number | null {
   return null;
 }
 
-/**
- * Puts the pull requests that share a merge commit in the order they were
- * written, bottom of the stack first. Each one in a stack is based on the
- * branch of the one below it, which is enough to rebuild the chain. A shape
- * the chain cannot explain — a fork, or a branch name deleted and reused —
- * falls back to PR number, which is the order they were opened in.
- */
-export function orderStack<T extends Pick<PullRequest, 'number' | 'baseRefName' | 'headRefName'>>(
-  prs: ReadonlyArray<T>,
-): Array<T> {
-  if (prs.length < 2) return [...prs];
+export interface OrderedStack<T> {
+  /** The order entries are emitted in, bottom of the stack first. */
+  prs: Array<T>;
+  /** Whether git vouched for that order being a real chain of commits. */
+  verified: boolean;
+}
 
-  const byNumber = () => [...prs].sort((a, b) => a.number - b.number);
+/**
+ * The bottom-first order a stack's branch names imply, or null when they do
+ * not describe one single chain. Each pull request in a stack is based on the
+ * branch of the one below it, so the chain can be walked from whichever one
+ * is not based on another's branch.
+ *
+ * Branch names are a claim, not proof — a name can be deleted and reused, and
+ * the reused one can still spell out a plausible-looking chain — so what
+ * comes back here is a candidate for `isVerifiedChain` to check against git.
+ */
+export function chainByBranchNames<
+  T extends Pick<PullRequest, 'baseRefName' | 'headRefName'>,
+>(prs: ReadonlyArray<T>): Array<T> | null {
   const heads = new Set(prs.map(pr => pr.headRefName));
   const bottom = prs.filter(pr => !heads.has(pr.baseRefName));
-  if (bottom.length !== 1) return byNumber();
+  if (bottom.length !== 1 || bottom[0] === undefined) return null;
 
   const ordered: Array<T> = [];
   let current: T | undefined = bottom[0];
@@ -54,33 +61,71 @@ export function orderStack<T extends Pick<PullRequest, 'number' | 'baseRefName' 
     const head: string = current.headRefName;
     current = prs.find(pr => pr.baseRefName === head);
   }
-  return ordered.length === prs.length ? ordered : byNumber();
+  return ordered.length === prs.length ? ordered : null;
 }
 
 /**
- * Whether an ordered stack is a real chain in git: every pull request has a
- * known head commit, and each one builds on the head of the one below it.
+ * Whether git agrees that an ordered stack is the chain its branch names
+ * claim: every head commit is part of the merge commit, and each one builds
+ * on the head below it.
  *
- * The order above comes from branch names, which describe a stack but do not
- * prove one — a branch can be deleted and its name reused, and an order that
- * fell back to PR number was never a chain to begin with. Getting the order
- * wrong only shuffles bullet points, but cutting ranges from a chain that
- * isn't one credits one pull request with another's files, so the ranges are
- * only worth cutting once git agrees.
+ * Both halves matter, and for different reasons. Checking each head against
+ * the merge commit is what ties a pull request to *this* release: headRefOid
+ * is where the branch head is now, which is not necessarily where it was when
+ * it merged, and a branch pushed to afterwards would otherwise drag commits
+ * that never landed here into the range cut for it. Checking the heads
+ * against each other is what makes the ranges between them meaningful.
+ *
+ * A squashed merge shares no commits with the branches it came from, so it
+ * cannot verify and its stack is left whole. That costs a bullet point too
+ * many, which beats crediting a pull request with files it never touched.
  */
 export function isVerifiedChain(
   orderedPrs: ReadonlyArray<Pick<PullRequest, 'headRefOid'>>,
+  mergeSha: string,
 ): boolean {
   if (orderedPrs.some(pr => !pr.headRefOid)) return false;
+
+  // `--is-ancestor` exits non-zero both when it isn't an ancestor and when
+  // the objects aren't here to compare — neither is something we can measure.
+  const isAncestor = (a: string, b: string) =>
+    safeRun(`git merge-base --is-ancestor ${a} ${b}`).ok;
+
+  for (const pr of orderedPrs) {
+    if (!isAncestor(pr.headRefOid, mergeSha)) return false;
+  }
   for (let i = 1; i < orderedPrs.length; i += 1) {
-    // Exits non-zero both when it isn't an ancestor and when the objects
-    // aren't here to compare — neither is a chain we can measure against.
-    const res = safeRun(
-      `git merge-base --is-ancestor ${orderedPrs[i - 1]?.headRefOid} ${orderedPrs[i]?.headRefOid}`,
-    );
-    if (!res.ok) return false;
+    const below = orderedPrs[i - 1]?.headRefOid;
+    const above = orderedPrs[i]?.headRefOid;
+    if (!below || !above || !isAncestor(below, above)) return false;
   }
   return true;
+}
+
+/**
+ * The order a stack's entries are emitted in, and whether git vouched for it.
+ *
+ * An order git will not vouch for falls back to PR number — the order they
+ * were opened in — and says so, because the same inference that puts the
+ * bullet points in order is the one the ranges are cut along. Getting the
+ * order wrong only shuffles bullet points; cutting ranges from a chain that
+ * isn't one credits a pull request with another's files. Both come from the
+ * same claim, so both wait on the same check.
+ */
+export function orderStack<
+  T extends Pick<PullRequest, 'number' | 'baseRefName' | 'headRefName' | 'headRefOid'>,
+>(prs: ReadonlyArray<T>, mergeSha: string): OrderedStack<T> {
+  if (prs.length < 2) return { prs: [...prs], verified: false };
+
+  const byNumber = (): OrderedStack<T> => ({
+    prs: [...prs].sort((a, b) => a.number - b.number),
+    verified: false,
+  });
+
+  const chain = chainByBranchNames(prs);
+  if (!chain) return byNumber();
+  if (!isVerifiedChain(chain, mergeSha)) return byNumber();
+  return { prs: chain, verified: true };
 }
 
 /**
@@ -106,16 +151,16 @@ function prTouchedPaths(
  * Narrows an ordered stack to the pull requests that touched the pathspec.
  * Each one's base is the head of the one below it, so walking a verified
  * chain in order gives every pull request a range covering only its own
- * commits. A stack git won't vouch for is left whole rather than cut along
+ * commits. A stack git wouldn't vouch for is left whole rather than cut along
  * ranges that don't mean anything.
  */
 export function filterStackByPaths<T extends Pick<PullRequest, 'headRefOid'>>(
-  orderedPrs: ReadonlyArray<T>,
+  stack: OrderedStack<T>,
   mergeSha: string,
   paths: ReadonlyArray<string>,
 ): Array<T> {
-  if (!paths.length || orderedPrs.length < 2) return [...orderedPrs];
-  if (!isVerifiedChain(orderedPrs)) return [...orderedPrs];
+  const orderedPrs = stack.prs;
+  if (!paths.length || orderedPrs.length < 2 || !stack.verified) return [...orderedPrs];
 
   const firstParent = safeRun(`git rev-parse ${mergeSha}^1`);
   if (!firstParent.ok) return [...orderedPrs];
@@ -208,7 +253,7 @@ export function fetchGitHubMeta(
     // A stack contributes one entry per pull request, so the ones below the
     // top of it get described instead of disappearing into their neighbour's
     // merge commit.
-    const stack = filterStackByPaths(orderStack(prs), c.hash, paths);
+    const stack = filterStackByPaths(orderStack(prs, c.hash), c.hash, paths);
     return stack.map(pr => ({
       ...c,
       subject: pr.title || c.subject,

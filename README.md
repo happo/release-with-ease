@@ -36,6 +36,14 @@ of disappearing into their neighbour's merge commit. With `--path` set, each
 pull request in the stack is matched against the pathspec on its own, so a
 stack that spans several packages only shows up where it belongs.
 
+The order comes from the branch each pull request was based on, but only after
+git confirms the commits line up that way and that all of them are part of the
+merge. Branch names can be reused, and a branch can be pushed to after it
+merged, so where the claim doesn't check out the entries fall back to the order
+they were opened in and the pathspec is applied to the stack as a whole. That
+can leave a bullet point too many, which is easy to delete in the editor step —
+unlike a pull request credited with files it never touched.
+
 The list of entries is printed before anything is sent to Claude — worth a
 glance, since it is what the release notes are written from.
 
