@@ -18,7 +18,7 @@ jobs:
         # The tests run `.ts` straight from source through Node's type
         # stripping, which needs 22.18 or newer. The published package is
         # compiled JavaScript and is checked against the `engines` floor by
-        # the `build` job below.
+        # the `smoke` job below.
         node: ['22', '24']
 
     steps:
@@ -40,7 +40,7 @@ jobs:
         run: pnpm test
 
   build:
-    name: Build and run on the oldest supported Node
+    name: Build
     runs-on: ubuntu-latest
 
     steps:
@@ -55,17 +55,48 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Build
-        run: pnpm build
+      - run: pnpm build
 
-      # The bin shim is what `npx release-with-ease` runs, and it only ever
-      # loads compiled output — so check the whole import chain parses and
-      # runs on the version `engines` promises, not just on the newest Node.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 1
+
+  smoke:
+    # The bin shim is what `npx release-with-ease` runs, and it only ever
+    # loads compiled output — so check that the whole import chain parses and
+    # runs on the version `engines` promises, not just on the newest Node.
+    #
+    # This is a separate job because pnpm itself needs a newer Node than the
+    # floor being tested: installing and building happen in `build`, and only
+    # the compiled output crosses over.
+    name: Run the built CLI on the oldest supported Node
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # Read the floor out of `engines` rather than repeating it here, so
+      # raising the minimum in package.json moves this check with it.
+      - name: Read the engines floor
+        id: engines
+        run: |
+          floor=$(node -p "require('./package.json').engines.node.replace(/[^0-9.]/g, '')")
+          echo "Minimum supported Node: $floor"
+          echo "node=$floor" >> "$GITHUB_OUTPUT"
+
       - uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: ${{ steps.engines.outputs.node }}
 
-      - name: Run the compiled CLI on Node 20
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Run the compiled CLI
         run: |
           set -e
           node --version
