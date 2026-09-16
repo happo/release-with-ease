@@ -149,6 +149,28 @@ export NPM_OTP_COMMAND='lpass show --totp "my npm entry"'
 If no OTP source is available, npm's native OTP prompt appears at publish
 time and you can type the code by hand.
 
+# Development
+
+The source is TypeScript under `src/`, compiled to `dist/` by `tsc`. The
+published `bin/release-with-ease.js` is a shim over the compiled output, so
+what `npx` runs is ordinary JavaScript and the `engines` floor holds.
+
+```sh
+pnpm install
+pnpm test    # node --test, straight from the TypeScript sources
+pnpm tsc     # type-check everything, including the tests
+pnpm build   # compile src/ to dist/
+```
+
+Tests use Node's built-in test runner and no test framework. Rather than
+mocking, they build real git repositories in a temporary directory and run
+real `git` against them, so the merge shapes under test — a stack landing as
+one commit, a branch behind its origin — are the shapes git actually
+produces. Where an external command has to be stood in for, it is stood in
+for at the lowest level available: `gh` is a real executable placed on `PATH`,
+and the Anthropic API is a real HTTP server on localhost reached through
+`ANTHROPIC_BASE_URL`.
+
 # Changelog
 
 ## 2.6.0
