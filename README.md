@@ -155,12 +155,21 @@ The source is TypeScript under `src/`, compiled to `dist/` by `tsc`. The
 published `bin/release-with-ease.js` is a shim over the compiled output, so
 what `npx` runs is ordinary JavaScript and the `engines` floor holds.
 
+Node and pnpm versions are pinned in `mise.toml`, so
+[mise](https://mise.jdx.dev/) will put the right ones on your path:
+
 ```sh
+mise install
 pnpm install
 pnpm test    # node --test, straight from the TypeScript sources
 pnpm tsc     # type-check everything, including the tests
 pnpm build   # compile src/ to dist/
 ```
+
+Working on the package needs a newer Node than using it does: the tests run
+the TypeScript sources directly through Node's type stripping, which wants
+22.18 or newer, while the published JavaScript only needs what `engines` says.
+CI checks both.
 
 Tests use Node's built-in test runner and no test framework. Rather than
 mocking, they build real git repositories in a temporary directory and run

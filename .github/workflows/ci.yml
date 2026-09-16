@@ -25,6 +25,8 @@ jobs:
       - uses: actions/checkout@v5
 
       - uses: pnpm/action-setup@v4
+        with:
+          version: 11
 
       - uses: actions/setup-node@v5
         with:
@@ -47,6 +49,8 @@ jobs:
       - uses: actions/checkout@v5
 
       - uses: pnpm/action-setup@v4
+        with:
+          version: 11
 
       - uses: actions/setup-node@v5
         with:
@@ -90,9 +94,9 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: ${{ steps.engines.outputs.node }}
-          # setup-node reads `packageManager` from package.json and would try
-          # to run pnpm to prime its cache. This job deliberately has no pnpm
-          # — it runs only the built output — so there is nothing to cache.
+          # This job deliberately has no package manager — it runs only the
+          # built output — so there is nothing for setup-node to cache, and
+          # looking for one is what it would fail on.
           package-manager-cache: false
 
       - uses: actions/download-artifact@v4
