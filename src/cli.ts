@@ -191,7 +191,8 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
       console.log(`  ${step++}. git add README.md`);
       console.log(`  ${step++}. git commit -m "Update changelog for ${newVersion}"`);
     }
-    console.log(`  ${step++}. npm version ${finalBump} -m "%s"`);
+    console.log(`  ${step++}. npm version ${finalBump} --no-git-tag-version`);
+    console.log(`  ${step++}. git add package.json (and any lockfile) + commit + tag v${newVersion}`);
     console.log(`  ${step++}. git push origin ${defaultBranch} --tags`);
     console.log(
       `  ${step++}. gh release create v${newVersion} --title "v${newVersion}" --notes-file <entry>`,
@@ -226,8 +227,19 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
 
   fs.unlinkSync(tempEntryPath);
 
-  // Use npm version keyword per user preference
-  run(`npm version ${finalBump} -m "%s"`);
+  // Bump the version with npm, but commit and tag it ourselves: `npm
+  // version`'s git detection (`@npmcli/git`'s `is()`) only checks for a
+  // literal ".git" entry inside its own cwd, so for a package released from
+  // a subdirectory of the repo (no ".git" there — it's at the repo root) it
+  // silently decides it isn't in a git repo and skips the commit and tag
+  // altogether, leaving the version bump as an uncommitted change.
+  run(`npm version ${finalBump} --no-git-tag-version`);
+  run('git add package.json');
+  for (const lockFile of ['package-lock.json', 'npm-shrinkwrap.json']) {
+    if (fs.existsSync(lockFile)) run(`git add ${lockFile}`);
+  }
+  run(`git commit -m "${newVersion}"`);
+  run(`git tag -m "${newVersion}" "v${newVersion}"`);
 
   // Push commit and tags explicitly
   run(`git push origin ${defaultBranch} --tags`);
