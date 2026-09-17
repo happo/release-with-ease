@@ -190,6 +190,12 @@ and the Anthropic API is a real HTTP server on localhost reached through
 
 # Changelog
 
+## 2.7.1
+
+- Fix git detection for packages in subdirectories to properly commit and tag version bumps [by @trotzig in #22]
+- Update @types/node from 22.20.2 to 26.5.1 [by @app/dependabot in #21]
+- Update actions/setup-node from 5.0.0 to 7.0.0 [by @app/dependabot in #20]
+
 ## 2.7.0
 
 - Describe every pull request in a merged stack, fixing missing changelog entries when multiple PRs are merged together [by @lencioni in #19]
