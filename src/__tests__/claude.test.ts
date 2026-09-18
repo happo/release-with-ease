@@ -210,7 +210,7 @@ describe('askClaudeForRelease', () => {
     });
 
     await assert.rejects(
-      () => askClaudeForRelease([commit()]),
+      () => askClaudeForRelease([commit()], false, { sleep: async () => {}, maxRetries: 0 }),
       /Failed to determine version bump:.*429/,
     );
   });
@@ -222,5 +222,90 @@ describe('askClaudeForRelease', () => {
     });
 
     await assert.rejects(() => askClaudeForRelease([commit()]), SyntaxError);
+  });
+
+  /** Records the delays a fake sleep was called with instead of waiting for real time. */
+  function fakeSleep(): { sleep: (ms: number) => Promise<void>; delays: Array<number> } {
+    const delays: Array<number> = [];
+    return {
+      delays,
+      sleep: async (ms: number) => {
+        delays.push(ms);
+      },
+    };
+  }
+
+  it('retries a 529 overloaded_error and succeeds once the API recovers', async () => {
+    let requests = 0;
+    await serve((_req, _body, res) => {
+      requests++;
+      if (requests < 3) {
+        res.writeHead(529, { 'Content-Type': 'application/json' });
+        res.end('{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}');
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(reply(JSON.stringify({ bump: 'patch', reasoning: 'r', notes: ['n'] })));
+    });
+
+    const { sleep, delays } = fakeSleep();
+    const result = await askClaudeForRelease([commit()], false, { sleep });
+
+    assert.strictEqual(requests, 3);
+    assert.strictEqual(delays.length, 2);
+    assert.strictEqual(result?.bump, 'patch');
+  });
+
+  it('retries a 429 and honors a numeric Retry-After header', async () => {
+    let requests = 0;
+    await serve((_req, _body, res) => {
+      requests++;
+      if (requests === 1) {
+        res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '2' });
+        res.end('{"error":"rate limited"}');
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(reply(JSON.stringify({ bump: 'minor', reasoning: 'r', notes: ['n'] })));
+    });
+
+    const { sleep, delays } = fakeSleep();
+    const result = await askClaudeForRelease([commit()], false, { sleep });
+
+    assert.strictEqual(requests, 2);
+    assert.deepStrictEqual(delays, [2000]);
+    assert.strictEqual(result?.bump, 'minor');
+  });
+
+  it('gives up and throws after exhausting retries', async () => {
+    let requests = 0;
+    await serve((_req, _body, res) => {
+      requests++;
+      res.writeHead(529, { 'Content-Type': 'application/json' });
+      res.end('{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}');
+    });
+
+    const { sleep } = fakeSleep();
+    await assert.rejects(
+      () => askClaudeForRelease([commit()], false, { sleep, maxRetries: 2 }),
+      /Failed to determine version bump:.*529/,
+    );
+    assert.strictEqual(requests, 3);
+  });
+
+  it('does not retry a non-retryable status like 400', async () => {
+    let requests = 0;
+    await serve((_req, _body, res) => {
+      requests++;
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end('{"error":"bad request"}');
+    });
+
+    const { sleep } = fakeSleep();
+    await assert.rejects(
+      () => askClaudeForRelease([commit()], false, { sleep }),
+      /Failed to determine version bump:.*400/,
+    );
+    assert.strictEqual(requests, 1);
   });
 });

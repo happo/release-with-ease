@@ -65,30 +65,119 @@ export function parseReleaseSuggestion(raw: string): ReleaseSuggestion {
   };
 }
 
+// Statuses worth retrying: rate limiting, transient server errors, and the
+// "overloaded_error" 529 Anthropic returns when capacity is tight.
+const RETRYABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504, 529]);
+
+const DEFAULT_MAX_RETRIES = 5;
+const DEFAULT_BASE_DELAY_MS = 1000;
+const DEFAULT_MAX_DELAY_MS = 30_000;
+
+export interface RetryOptions {
+  maxRetries?: number;
+  baseDelayMs?: number;
+  maxDelayMs?: number;
+  sleep?: (ms: number) => Promise<void>;
+}
+
+/**
+ * Seconds or an HTTP-date, per the Retry-After spec. Anthropic (and most
+ * APIs that 429/529) send the former, but both are handled since either is
+ * legal.
+ */
+function parseRetryAfterMs(header: string | null): number | null {
+  if (!header) return null;
+  const trimmed = header.trim();
+  if (/^\d+$/.test(trimmed)) return Number(trimmed) * 1000;
+  const date = Date.parse(trimmed);
+  if (!Number.isNaN(date)) return Math.max(0, date - Date.now());
+  return null;
+}
+
+/**
+ * Exponential backoff with jitter, capped at maxDelayMs. A server-provided
+ * Retry-After takes priority over the computed delay when present, since it
+ * reflects the server's own view of when capacity will free up.
+ */
+function backoffDelayMs(attempt: number, retryAfterMs: number | null, opts: Required<RetryOptions>): number {
+  if (retryAfterMs !== null) return Math.min(retryAfterMs, opts.maxDelayMs);
+  const exp = opts.baseDelayMs * 2 ** attempt;
+  const jitter = Math.random() * opts.baseDelayMs;
+  return Math.min(exp + jitter, opts.maxDelayMs);
+}
+
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  options: RetryOptions = {},
+): Promise<Response> {
+  const opts: Required<RetryOptions> = {
+    maxRetries: Math.max(0, options.maxRetries ?? DEFAULT_MAX_RETRIES),
+    baseDelayMs: Math.max(0, options.baseDelayMs ?? DEFAULT_BASE_DELAY_MS),
+    maxDelayMs: Math.max(0, options.maxDelayMs ?? DEFAULT_MAX_DELAY_MS),
+    sleep: options.sleep ?? (ms => new Promise(resolve => setTimeout(resolve, ms))),
+  };
+
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= opts.maxRetries; attempt++) {
+    let res: Response;
+    try {
+      res = await fetch(url, init);
+    } catch (err) {
+      // Network-level failure (DNS, connection reset, timeout, ...): retry
+      // the same as a retryable status, since it's just as transient.
+      lastError = err;
+      if (attempt === opts.maxRetries) throw err;
+      await opts.sleep(backoffDelayMs(attempt, null, opts));
+      continue;
+    }
+
+    if (res.ok || !RETRYABLE_STATUSES.has(res.status) || attempt === opts.maxRetries) {
+      return res;
+    }
+
+    const retryAfterMs = parseRetryAfterMs(res.headers.get('retry-after'));
+    console.error(
+      `Claude API request failed with ${res.status} ${res.statusText}; retrying (attempt ${
+        attempt + 1
+      }/${opts.maxRetries})...`,
+    );
+    await res.body?.cancel();
+    await opts.sleep(backoffDelayMs(attempt, retryAfterMs, opts));
+  }
+  // Unreachable: the loop above always returns or throws.
+  throw lastError instanceof Error ? lastError : new Error('Failed to reach Claude API');
+}
+
 export async function askClaudeForRelease(
   commits: ReadonlyArray<CommitWithMeta>,
   isPublicPackage = false,
+  retryOptions: RetryOptions = {},
 ): Promise<ReleaseSuggestion | null> {
   const apiKey = process.env['ANTHROPIC_API_KEY'];
   if (!apiKey) return null;
 
   const baseUrl = process.env['ANTHROPIC_BASE_URL'] || 'https://api.anthropic.com';
 
-  const res = await fetch(`${baseUrl}/v1/messages`, {
-    method: 'POST',
-    headers: {
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'Content-Type': 'application/json',
+  const res = await fetchWithRetry(
+    `${baseUrl}/v1/messages`,
+    {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5',
+        max_tokens: 500,
+        temperature: 0.2,
+        system: buildSystemPrompt(isPublicPackage),
+        messages: [{ role: 'user', content: buildUserContent(commits) }],
+      }),
     },
-    body: JSON.stringify({
-      model: 'claude-haiku-4-5',
-      max_tokens: 500,
-      temperature: 0.2,
-      system: buildSystemPrompt(isPublicPackage),
-      messages: [{ role: 'user', content: buildUserContent(commits) }],
-    }),
-  });
+    retryOptions,
+  );
   if (!res.ok) {
     console.error(await res.text());
     throw new Error(
