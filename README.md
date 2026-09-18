@@ -190,6 +190,10 @@ and the Anthropic API is a real HTTP server on localhost reached through
 
 # Changelog
 
+## 2.7.2
+
+- Prevent release process from failing due to temporary API unavailability [by @Kaushik2210 in #23]
+
 ## 2.7.1
 
 - Fix git detection for packages in subdirectories to properly commit and tag version bumps [by @trotzig in #22]
