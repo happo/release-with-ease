@@ -87,9 +87,9 @@ export interface RetryOptions {
  */
 function parseRetryAfterMs(header: string | null): number | null {
   if (!header) return null;
-  const seconds = Number(header);
-  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
-  const date = Date.parse(header);
+  const trimmed = header.trim();
+  if (/^\d+$/.test(trimmed)) return Number(trimmed) * 1000;
+  const date = Date.parse(trimmed);
   if (!Number.isNaN(date)) return Math.max(0, date - Date.now());
   return null;
 }
@@ -112,9 +112,9 @@ async function fetchWithRetry(
   options: RetryOptions = {},
 ): Promise<Response> {
   const opts: Required<RetryOptions> = {
-    maxRetries: options.maxRetries ?? DEFAULT_MAX_RETRIES,
-    baseDelayMs: options.baseDelayMs ?? DEFAULT_BASE_DELAY_MS,
-    maxDelayMs: options.maxDelayMs ?? DEFAULT_MAX_DELAY_MS,
+    maxRetries: Math.max(0, options.maxRetries ?? DEFAULT_MAX_RETRIES),
+    baseDelayMs: Math.max(0, options.baseDelayMs ?? DEFAULT_BASE_DELAY_MS),
+    maxDelayMs: Math.max(0, options.maxDelayMs ?? DEFAULT_MAX_DELAY_MS),
     sleep: options.sleep ?? (ms => new Promise(resolve => setTimeout(resolve, ms))),
   };
 
@@ -142,6 +142,7 @@ async function fetchWithRetry(
         attempt + 1
       }/${opts.maxRetries})...`,
     );
+    await res.body?.cancel();
     await opts.sleep(backoffDelayMs(attempt, retryAfterMs, opts));
   }
   // Unreachable: the loop above always returns or throws.
