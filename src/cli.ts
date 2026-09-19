@@ -253,7 +253,7 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
     run(`git tag -m "${newVersion}" "${tagName}"`);
 
     // Push commit and tags explicitly
-    run(`git push origin ${defaultBranch} --tags`);
+    run(`git push --atomic origin ${defaultBranch} --tags`);
   } catch (err) {
     console.error(
       `\n❌ Release failed before anything was pushed: ${(err as Error).message || err}`,
