@@ -5,11 +5,13 @@ import { afterEach, describe, it } from 'node:test';
 import {
   getCommitRange,
   getCurrentBranch,
+  getCurrentCommit,
   getDefaultBranch,
   getLastVersionTag,
   parseCommits,
   pathspecSuffix,
   preflightChecks,
+  rollbackLocalRelease,
   shellQuote,
 } from '../git.ts';
 import { initRepo, mergeTwoDeepStack } from '../test-utils/gitRepo.ts';
@@ -186,6 +188,40 @@ describe('against a real repository', () => {
       repo.git('reset', '--hard', 'HEAD~1');
       repo.git('fetch', 'origin');
       assert.throws(preflightChecks, /behind origin\/main by 1 commit/);
+    });
+  });
+
+  describe('getCurrentCommit / rollbackLocalRelease', () => {
+    it('reports the sha of HEAD', () => {
+      tmpfs.mock({});
+      const repo = initRepo();
+      const sha = execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim();
+      assert.strictEqual(getCurrentCommit(), sha);
+      void repo;
+    });
+
+    it('discards commits and a tag made after the given ref, leaving origin alone', () => {
+      tmpfs.mock({});
+      const repo = initRepo();
+      const startCommit = getCurrentCommit();
+
+      repo.commit({ 'CHANGELOG.md': 'entry' }, 'Update changelog for 1.1.0');
+      repo.commit({ 'package.json': '{"version":"1.1.0"}' }, '1.1.0');
+      repo.git('tag', '-m', '1.1.0', 'v1.1.0');
+
+      assert.strictEqual(rollbackLocalRelease(startCommit, 'v1.1.0'), true);
+      assert.strictEqual(getCurrentCommit(), startCommit);
+      assert.throws(() => repo.git('rev-parse', 'v1.1.0'));
+    });
+
+    it('rolls back commits even with no tag to delete', () => {
+      tmpfs.mock({});
+      const repo = initRepo();
+      const startCommit = getCurrentCommit();
+      repo.commit({ 'a.txt': 'a' }, 'Local only');
+
+      assert.strictEqual(rollbackLocalRelease(startCommit, null), true);
+      assert.strictEqual(getCurrentCommit(), startCommit);
     });
   });
 

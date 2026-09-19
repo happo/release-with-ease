@@ -39,9 +39,11 @@ import { run, safeRun } from './exec.ts';
 import {
   fetchOriginTags,
   getCommitRange,
+  getCurrentCommit,
   getLastVersionTag,
   parseCommits,
   preflightChecks,
+  rollbackLocalRelease,
 } from './git.ts';
 import { fetchGitHubMeta, type CommitWithMeta } from './github.ts';
 import { fetchNpmOtp } from './npm.ts';
@@ -215,36 +217,67 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
   // Read the edited entry
   const editedEntry = fs.readFileSync(tempEntryPath, 'utf8');
 
-  if (useReadmeChangelog) {
-    // Insert changelog entry into README.md
-    const readme = fs.readFileSync(readmePath(), 'utf8');
-    const updatedReadme = insertChangelogEntry(readme, editedEntry.trim().split('\n'));
-    fs.writeFileSync(readmePath(), updatedReadme);
+  // Everything from here through the push is local and fully reversible, so
+  // its starting point is worth remembering: preflightChecks already
+  // guarantees HEAD is clean and in sync with origin, so a rollback to this
+  // commit can only ever undo commits/tags this run made itself.
+  const startCommit = getCurrentCommit();
+  let tagName: string | null = null;
 
-    run('git add README.md');
-    run(`git commit -m "Update changelog for ${newVersion}"`);
+  try {
+    if (useReadmeChangelog) {
+      // Insert changelog entry into README.md
+      const readme = fs.readFileSync(readmePath(), 'utf8');
+      const updatedReadme = insertChangelogEntry(readme, editedEntry.trim().split('\n'));
+      fs.writeFileSync(readmePath(), updatedReadme);
+
+      run('git add README.md');
+      run(`git commit -m "Update changelog for ${newVersion}"`);
+    }
+
+    fs.unlinkSync(tempEntryPath);
+
+    // Bump the version with npm, but commit and tag it ourselves: `npm
+    // version`'s git detection (`@npmcli/git`'s `is()`) only checks for a
+    // literal ".git" entry inside its own cwd, so for a package released
+    // from a subdirectory of the repo (no ".git" there — it's at the repo
+    // root) it silently decides it isn't in a git repo and skips the commit
+    // and tag altogether, leaving the version bump as an uncommitted change.
+    run(`npm version ${finalBump} --no-git-tag-version`);
+    run('git add package.json');
+    for (const lockFile of ['package-lock.json', 'npm-shrinkwrap.json']) {
+      if (fs.existsSync(lockFile)) run(`git add ${lockFile}`);
+    }
+    run(`git commit -m "${newVersion}"`);
+    tagName = `v${newVersion}`;
+    run(`git tag -m "${newVersion}" "${tagName}"`);
+
+    // Push commit and tags explicitly
+    run(`git push --atomic origin ${defaultBranch} --tags`);
+  } catch (err) {
+    console.error(
+      `\n❌ Release failed before anything was pushed: ${(err as Error).message || err}`,
+    );
+    if (rollbackLocalRelease(startCommit, tagName)) {
+      console.error(
+        `🔄 Rolled back local changes. "${defaultBranch}" is back at ${startCommit.slice(
+          0,
+          7,
+        )}; origin was never touched.`,
+      );
+    } else {
+      console.error(
+        '⚠️  Automatic rollback failed too. The release commit(s)/tag may still be present ' +
+          'locally — check `git log` and `git tag`, and clean up manually before retrying.',
+      );
+    }
+    throw err;
   }
 
-  fs.unlinkSync(tempEntryPath);
-
-  // Bump the version with npm, but commit and tag it ourselves: `npm
-  // version`'s git detection (`@npmcli/git`'s `is()`) only checks for a
-  // literal ".git" entry inside its own cwd, so for a package released from
-  // a subdirectory of the repo (no ".git" there — it's at the repo root) it
-  // silently decides it isn't in a git repo and skips the commit and tag
-  // altogether, leaving the version bump as an uncommitted change.
-  run(`npm version ${finalBump} --no-git-tag-version`);
-  run('git add package.json');
-  for (const lockFile of ['package-lock.json', 'npm-shrinkwrap.json']) {
-    if (fs.existsSync(lockFile)) run(`git add ${lockFile}`);
-  }
-  run(`git commit -m "${newVersion}"`);
-  run(`git tag -m "${newVersion}" "v${newVersion}"`);
-
-  // Push commit and tags explicitly
-  run(`git push origin ${defaultBranch} --tags`);
-
-  // Create GitHub release
+  // Create GitHub release. From here on, the commit and tag are already
+  // public on origin, so a failure can't be rolled back automatically —
+  // instead each step says exactly what already happened and how to finish
+  // the rest by hand.
   const ghNotesFile = path.join(
     os.tmpdir(),
     `release-notes-${crypto.randomBytes(8).toString('hex')}.md`,
@@ -255,8 +288,15 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
       `gh release create v${newVersion} --title "v${newVersion}" --notes-file "${ghNotesFile}"`,
     ).trim();
     console.log(`\n🎉 GitHub release created: ${releaseUrl}`);
-  } finally {
     fs.unlinkSync(ghNotesFile);
+  } catch (err) {
+    console.error(
+      `\n⚠️  v${newVersion} was committed, tagged, and pushed to ${defaultBranch}, but creating ` +
+        `the GitHub release failed. This was not rolled back since the tag is already public.\n` +
+        `   Release notes were saved to ${ghNotesFile} — retry with:\n` +
+        `     gh release create v${newVersion} --title "v${newVersion}" --notes-file "${ghNotesFile}"`,
+    );
+    throw err;
   }
 
   if (isPublicPackage) {
@@ -277,6 +317,10 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
       console.log('\n🔐 Not logged in to npm. Opening browser for npm login...');
       const loginResult = safeRun('npm login', { stdio: 'inherit' });
       if (!loginResult.ok) {
+        console.error(
+          `\n⚠️  v${newVersion} was released on GitHub, but npm login failed so it was not ` +
+            `published to npm.\n   Once you're logged in, publish manually with: npm publish`,
+        );
         throw loginResult.err;
       }
     }
@@ -285,6 +329,10 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
     const publishCmd = otp ? `npm publish --otp=${otp}` : 'npm publish';
     const publishResult = safeRun(publishCmd, { stdio: 'inherit' });
     if (!publishResult.ok) {
+      console.error(
+        `\n⚠️  v${newVersion} was released on GitHub, but \`npm publish\` failed.\n` +
+          `   Retry manually with: ${publishCmd}`,
+      );
       throw publishResult.err;
     }
     console.log(`\n📦 Published ${pkg.name}@${newVersion} to npm.`);

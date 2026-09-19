@@ -1,4 +1,4 @@
-import { safeRun } from './exec.ts';
+import { run, safeRun } from './exec.ts';
 
 export interface Commit {
   hash: string;
@@ -99,6 +99,23 @@ export function preflightChecks(): { defaultBranch: string } {
   }
 
   return { defaultBranch };
+}
+
+/** The current commit, for restoring local state if a release fails partway through. */
+export function getCurrentCommit(): string {
+  return run('git rev-parse HEAD').trim();
+}
+
+/**
+ * Discards any local commits made since `ref` and deletes `tag` if it was
+ * created, without touching origin. Only ever called before a `git push`
+ * has succeeded — `preflightChecks` already guarantees the working tree was
+ * clean and in sync with origin at `ref`, so this can only be undoing
+ * commits/tags this run made itself.
+ */
+export function rollbackLocalRelease(ref: string, tag: string | null): boolean {
+  if (tag) safeRun(`git tag -d "${tag}"`);
+  return safeRun(`git reset --hard ${ref}`).ok;
 }
 
 export function getLastVersionTag(): string | null {
