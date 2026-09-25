@@ -28,7 +28,7 @@ import {
   unscopedSubdirectoryWarning,
   type PackageJson,
 } from './args.ts';
-import { askClaudeForRelease } from './claude.ts';
+import { askClaudeForRelease, type OmittedChange } from './claude.ts';
 import {
   hasReadmeChangelog,
   insertChangelogEntry,
@@ -60,6 +60,44 @@ export function formatCommitLine(commit: CommitWithMeta): string {
       ? ` (#${commit.prNumber})`
       : '';
   return `  ${shortSha} ${commit.subject}${pr}`;
+}
+
+/**
+ * Opens the block of editor-only context. Everything from this line to the end
+ * of the file is thrown away when the editor closes. It is an HTML comment so
+ * that, should the line get deleted by accident, what leaks into the
+ * changelog is still invisible once rendered.
+ */
+export const EDITOR_COMMENT_MARKER =
+  '<!-- release-with-ease: everything from this line down is discarded.';
+
+/**
+ * What the editor opens with: the entry to publish, then the changes no
+ * bullet point covers, so a change left out is a line to read rather than
+ * something to notice missing.
+ */
+export function buildEditorContent(
+  entry: string,
+  omitted: ReadonlyArray<OmittedChange>,
+): string {
+  const context = omitted.length
+    ? [
+        'These changes are not covered by any bullet point above. Add any that',
+        'users should hear about:',
+        '',
+        ...omitted.flatMap(({ commit, reason }) => [
+          formatCommitLine(commit),
+          `      ${reason ?? '(no reason given)'}`,
+        ]),
+      ]
+    : ['Every change in this release is covered by a bullet point above.'];
+  return [entry.trimEnd(), '', EDITOR_COMMENT_MARKER, '', ...context, '-->', ''].join('\n');
+}
+
+/** The entry as edited, without the editor-only context. */
+export function stripEditorComment(content: string): string {
+  const idx = content.indexOf(EDITOR_COMMENT_MARKER);
+  return (idx === -1 ? content : content.slice(0, idx)).trim();
 }
 
 export async function main(argv: ReadonlyArray<string>): Promise<void> {
@@ -129,7 +167,7 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
     throw new Error('Claude did not return a release suggestion.');
   }
 
-  const { bump, reasoning, notes } = result;
+  const { bump, reasoning, notes, omitted } = result;
 
   console.log(`\nSuggested version bump: ${bump}\n`);
   console.log(`Reasoning:\n\n${reasoning}\n`);
@@ -156,7 +194,7 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
   const randomName = `changelog-entry-${crypto.randomBytes(8).toString('hex')}.tmp`;
   const tempEntryPath = path.join(os.tmpdir(), randomName);
   const entryContent = [`## ${newVersion}`, '', ...notes, ''].join('\n');
-  fs.writeFileSync(tempEntryPath, entryContent);
+  fs.writeFileSync(tempEntryPath, buildEditorContent(entryContent, omitted));
 
   console.log(`\n📝 Opening editor to review changelog entry for ${newVersion}...`);
   console.log('   Edit the changelog entry as needed, then save and close the editor.');
@@ -213,12 +251,12 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
   }
 
   // Read the edited entry
-  const editedEntry = fs.readFileSync(tempEntryPath, 'utf8');
+  const editedEntry = stripEditorComment(fs.readFileSync(tempEntryPath, 'utf8'));
 
   if (useReadmeChangelog) {
     // Insert changelog entry into README.md
     const readme = fs.readFileSync(readmePath(), 'utf8');
-    const updatedReadme = insertChangelogEntry(readme, editedEntry.trim().split('\n'));
+    const updatedReadme = insertChangelogEntry(readme, editedEntry.split('\n'));
     fs.writeFileSync(readmePath(), updatedReadme);
 
     run('git add README.md');
@@ -249,7 +287,7 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
     os.tmpdir(),
     `release-notes-${crypto.randomBytes(8).toString('hex')}.md`,
   );
-  fs.writeFileSync(ghNotesFile, editedEntry.trim());
+  fs.writeFileSync(ghNotesFile, editedEntry);
   try {
     const releaseUrl = run(
       `gh release create v${newVersion} --title "v${newVersion}" --notes-file "${ghNotesFile}"`,

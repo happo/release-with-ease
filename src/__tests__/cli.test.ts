@@ -1,7 +1,12 @@
 import assert from 'node:assert';
 import { describe, it } from 'node:test';
 
-import { formatCommitLine } from '../cli.ts';
+import {
+  buildEditorContent,
+  EDITOR_COMMENT_MARKER,
+  formatCommitLine,
+  stripEditorComment,
+} from '../cli.ts';
 import type { CommitWithMeta } from '../github.ts';
 
 function commit(overrides: Partial<CommitWithMeta> = {}): CommitWithMeta {
@@ -52,5 +57,63 @@ describe('formatCommitLine', () => {
       '  0e3c3fb Let targets restrict hostnames (#1347)',
       '  0e3c3fb Stop WebRTC talking to the network (#1350)',
     ]);
+  });
+});
+
+describe('buildEditorContent', () => {
+  const entry = '## 1.2.0\n\n- Add a thing\n';
+
+  it('lists each omitted change with its reason below the entry', () => {
+    const content = buildEditorContent(entry, [
+      { commit: commit({ subject: 'Bump CI action', prNumber: 7 }), reason: 'CI only' },
+      { commit: commit({ subject: 'Retry stalled uploads', prNumber: 8 }), reason: null },
+    ]);
+    assert.strictEqual(
+      content,
+      [
+        '## 1.2.0',
+        '',
+        '- Add a thing',
+        '',
+        EDITOR_COMMENT_MARKER,
+        '',
+        'These changes are not covered by any bullet point above. Add any that',
+        'users should hear about:',
+        '',
+        '  0e3c3fb Bump CI action (#7)',
+        '      CI only',
+        '  0e3c3fb Retry stalled uploads (#8)',
+        '      (no reason given)',
+        '-->',
+        '',
+      ].join('\n'),
+    );
+  });
+
+  it('says so when every change is covered', () => {
+    assert.match(buildEditorContent(entry, []), /Every change in this release is covered/);
+  });
+});
+
+describe('stripEditorComment', () => {
+  it('round-trips to just the entry', () => {
+    const content = buildEditorContent('## 1.2.0\n\n- Add a thing\n', [
+      { commit: commit(), reason: 'internal' },
+    ]);
+    assert.strictEqual(stripEditorComment(content), '## 1.2.0\n\n- Add a thing');
+  });
+
+  it('keeps edits made above the marker', () => {
+    const content = buildEditorContent('## 1.2.0\n\n- Add a thing\n', [
+      { commit: commit(), reason: 'internal' },
+    ]).replace('- Add a thing', '- Add a thing\n- Retry stalled uploads');
+    assert.strictEqual(
+      stripEditorComment(content),
+      '## 1.2.0\n\n- Add a thing\n- Retry stalled uploads',
+    );
+  });
+
+  it('leaves content without the marker alone, apart from surrounding whitespace', () => {
+    assert.strictEqual(stripEditorComment('\n## 1.2.0\n\n- Add a thing\n\n'), '## 1.2.0\n\n- Add a thing');
   });
 });
