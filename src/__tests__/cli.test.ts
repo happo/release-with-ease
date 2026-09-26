@@ -113,6 +113,20 @@ describe('stripEditorComment', () => {
     );
   });
 
+  it('refuses to guess when the marker was deleted but the rest of the context was not', () => {
+    const content = buildEditorContent('## 1.2.0\n\n- Add a thing\n', [
+      { commit: commit(), reason: 'internal' },
+    ]).replace(`${EDITOR_COMMENT_MARKER}\n`, '');
+    assert.throws(() => stripEditorComment(content), /list of omitted changes/);
+  });
+
+  it('keeps an HTML comment the user wrote themselves', () => {
+    assert.strictEqual(
+      stripEditorComment('## 1.2.0\n\n- Add a thing\n<!--\nnote to self\n-->\n'),
+      '## 1.2.0\n\n- Add a thing\n<!--\nnote to self\n-->',
+    );
+  });
+
   it('leaves content without the marker alone, apart from surrounding whitespace', () => {
     assert.strictEqual(stripEditorComment('\n## 1.2.0\n\n- Add a thing\n\n'), '## 1.2.0\n\n- Add a thing');
   });

@@ -65,8 +65,8 @@ export function formatCommitLine(commit: CommitWithMeta): string {
 /**
  * Opens the block of editor-only context. Everything from this line to the end
  * of the file is thrown away when the editor closes. It is an HTML comment so
- * that, should the line get deleted by accident, what leaks into the
- * changelog is still invisible once rendered.
+ * the context reads as one in the editor; `stripEditorComment` refuses an
+ * entry that lost this line but kept the rest of the block.
  */
 export const EDITOR_COMMENT_MARKER =
   '<!-- release-with-ease: everything from this line down is discarded.';
@@ -94,10 +94,26 @@ export function buildEditorContent(
   return [entry.trimEnd(), '', EDITOR_COMMENT_MARKER, '', ...context, '-->', ''].join('\n');
 }
 
-/** The entry as edited, without the editor-only context. */
+/**
+ * The entry as edited, without the editor-only context.
+ *
+ * Without the marker there is no telling where the entry ends and the context
+ * begins, and a leftover `-->` means the context is still there — publishing
+ * it would put the list of omitted changes into the release notes.
+ */
 export function stripEditorComment(content: string): string {
   const idx = content.indexOf(EDITOR_COMMENT_MARKER);
-  return (idx === -1 ? content : content.slice(0, idx)).trim();
+  if (idx !== -1) return content.slice(0, idx).trim();
+
+  const lines = content.split('\n').map(line => line.trim());
+  const closeIdx = lines.indexOf('-->');
+  const openIdx = lines.findIndex(line => line.startsWith('<!--'));
+  if (closeIdx !== -1 && (openIdx === -1 || openIdx > closeIdx)) {
+    throw new Error(
+      `The line starting "${EDITOR_COMMENT_MARKER.slice(0, 24)}…" was removed, so the notes can't be told apart from the list of omitted changes below them. Delete that list, down to and including "-->", and run the release again.`,
+    );
+  }
+  return content.trim();
 }
 
 export async function main(argv: ReadonlyArray<string>): Promise<void> {
@@ -251,7 +267,13 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
   }
 
   // Read the edited entry
-  const editedEntry = stripEditorComment(fs.readFileSync(tempEntryPath, 'utf8'));
+  let editedEntry: string;
+  try {
+    editedEntry = stripEditorComment(fs.readFileSync(tempEntryPath, 'utf8'));
+  } catch (err) {
+    // Nothing has been committed yet, but the edits are only in the temp file.
+    throw new Error(`${(err as Error).message} Your edits are in ${tempEntryPath}.`);
+  }
 
   if (useReadmeChangelog) {
     // Insert changelog entry into README.md

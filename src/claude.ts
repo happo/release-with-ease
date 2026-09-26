@@ -48,6 +48,14 @@ export function buildSystemPrompt(isPublicPackage: boolean): string {
 const MAX_BODY_LENGTH = 2000;
 
 /**
+ * Keeps a subject or description from opening or closing a change tag of its
+ * own, which would hand the text after it to the wrong id.
+ */
+function escapeChangeTags(text: string): string {
+  return text.replace(/<(\/?)change\b/gi, '&lt;$1change');
+}
+
+/**
  * The change list as Claude sees it. Each change is tagged with an id — its
  * position in the list, counting from 1 — for the notes to cite, and the tag
  * keeps a description's own headings and lists from running into the next
@@ -63,8 +71,8 @@ export function buildUserContent(commits: ReadonlyArray<CommitWithMeta>): string
       if (c.githubLogin) meta.push(`by @${c.githubLogin}`);
       if (c.prNumber) meta.push(`in #${c.prNumber}`);
       const metaStr = meta.length ? ` [${meta.join(' ')}]` : '';
-      const lines = [`<change id="${i + 1}">`, `${c.subject}${metaStr}`];
-      if (truncatedBody) lines.push(truncatedBody);
+      const lines = [`<change id="${i + 1}">`, `${escapeChangeTags(c.subject)}${metaStr}`];
+      if (truncatedBody) lines.push(escapeChangeTags(truncatedBody));
       lines.push('</change>');
       return lines.join('\n');
     })
