@@ -9,10 +9,16 @@ updates:
     cooldown:
       default-days: 2
     groups:
+      # Dependabot puts a dependency in the first group it matches, so this
+      # catch-all stays first on purpose: every patch and minor lands here,
+      # and the package-specific groups below only ever collect majors.
       patches-and-minors:
         update-types:
           - 'patch'
           - 'minor'
+
+      # Vitest and its @vitest/* plugins release in lockstep, so a major
+      # moves them together.
       vitest:
         patterns:
           - 'vitest'
