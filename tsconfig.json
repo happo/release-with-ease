@@ -6,9 +6,9 @@
     "lib": ["es2023"],
     "types": ["node"],
 
-    // Source imports siblings as `./foo.ts` so `node --test src/**/*.test.ts`
-    // runs it directly through type stripping; the emit rewrites those to
-    // `.js` so `dist/` is ordinary, runnable JavaScript.
+    // Source imports siblings as `./foo.ts` so the tests run it straight from
+    // source; the emit rewrites those to `.js` so `dist/` is ordinary,
+    // runnable JavaScript.
     "allowImportingTsExtensions": true,
     "rewriteRelativeImportExtensions": true,
 

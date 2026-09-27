@@ -1,6 +1,6 @@
 {
-  // Tests are type-checked but never emitted: they run from source through
-  // Node's type stripping, so nothing about them belongs in `dist/`.
+  // Tests are type-checked but never emitted: Vitest runs them from source, so
+  // nothing about them belongs in `dist/`.
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "noEmit": true,

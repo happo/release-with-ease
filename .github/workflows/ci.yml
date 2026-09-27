@@ -15,10 +15,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The tests run `.ts` straight from source through Node's type
-        # stripping, which needs 22.18 or newer. The published package is
-        # compiled JavaScript and is checked against the `engines` floor by
-        # the `smoke` job below.
+        # The tests run `.ts` straight from source under Vitest, which needs
+        # Node 22.12+ or 24+. The published package is compiled JavaScript
+        # and is checked against the `engines` floor by the `smoke` job below.
         node: ['22', '24']
 
     steps:

@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 import { execSync } from 'node:child_process';
-import { afterEach, describe, it } from 'node:test';
+import { afterEach, describe, it } from 'vitest';
 
 import {
   getCommitRange,
