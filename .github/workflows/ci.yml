@@ -16,8 +16,8 @@ jobs:
       fail-fast: false
       matrix:
         # The tests run `.ts` straight from source under Vitest, which needs
-        # 22.12 or newer. The published package is compiled JavaScript and is
-        # checked against the `engines` floor by the `smoke` job below.
+        # Node 22.12+ or 24+. The published package is compiled JavaScript
+        # and is checked against the `engines` floor by the `smoke` job below.
         node: ['22', '24']
 
     steps:

@@ -175,11 +175,11 @@ pnpm build   # compile src/ to dist/
 ```
 
 Working on the package needs a newer Node than using it does: the tests run
-under Vitest, which wants 22.12 or newer, while the published JavaScript only
-needs what `engines` says. CI checks both.
+under Vitest, which wants Node 22.12+ or 24+, while the published JavaScript
+only needs what `engines` says. CI checks both.
 
-Tests use Node's built-in test runner and no test framework. Rather than
-mocking, they build real git repositories in a temporary directory and run
+Tests assert with `node:assert` and mock nothing. Instead, they build real
+git repositories in a temporary directory and run
 real `git` against them, so the merge shapes under test — a stack landing as
 one commit, a branch behind its origin — are the shapes git actually
 produces. Where an external command has to be stood in for, it is stood in
