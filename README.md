@@ -169,15 +169,14 @@ Node and pnpm versions are pinned in `mise.toml`, so
 ```sh
 mise install
 pnpm install
-pnpm test    # node --test, straight from the TypeScript sources
+pnpm test    # Vitest, straight from the TypeScript sources
 pnpm tsc     # type-check everything, including the tests
 pnpm build   # compile src/ to dist/
 ```
 
 Working on the package needs a newer Node than using it does: the tests run
-the TypeScript sources directly through Node's type stripping, which wants
-22.18 or newer, while the published JavaScript only needs what `engines` says.
-CI checks both.
+under Vitest, which wants 22.12 or newer, while the published JavaScript only
+needs what `engines` says. CI checks both.
 
 Tests use Node's built-in test runner and no test framework. Rather than
 mocking, they build real git repositories in a temporary directory and run
