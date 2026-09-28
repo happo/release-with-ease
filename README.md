@@ -120,7 +120,7 @@ Commit messages use the whole tag (`Update changelog for my-cli@1.3.0`,
 the new tag is pushed, not every tag that happens to exist locally.
 
 Switching an existing package over needs no new tag by hand: when there is no
-`my-cli@` tag yet, the `v` tag for the version `package.json` is at now (say
+`my-cli@` tag yet, the `v` tag for the current version in `package.json` (say
 `v1.2.0`) is where the release notes start from, and the release after it is
 `my-cli@1.3.0`.
 

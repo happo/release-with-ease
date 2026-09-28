@@ -102,3 +102,69 @@ describe('writeVersion', () => {
     );
   });
 });
+
+describe('writeVersion in an npm workspace', () => {
+  afterEach(() => {
+    tmpfs.restore();
+  });
+
+  const rootLock = () => ({
+    name: 'root',
+    lockfileVersion: 3,
+    packages: {
+      '': { name: 'root', workspaces: ['packages/*'] },
+      'node_modules/cli': { resolved: 'packages/cli', link: true },
+      'packages/cli': { name: 'cli', version: '1.0.0' },
+      'packages/web': { name: 'web', version: '4.0.0' },
+    },
+  });
+
+  it("updates the package's entry in the root lockfile", () => {
+    tmpfs.mock({});
+    tmpfs.writeFile('.git/HEAD', 'ref: refs/heads/main\n');
+    tmpfs.writeFile('package-lock.json', JSON.stringify(rootLock(), null, 2) + '\n');
+    tmpfs.writeFile('packages/cli/package.json', '{\n  "name": "cli",\n  "version": "1.0.0"\n}\n');
+
+    assert.deepStrictEqual(writeVersion(tmpfs.fullPath('packages/cli'), '1.1.0'), [
+      'package.json',
+      '../../package-lock.json',
+    ]);
+    const lock = JSON.parse(read('package-lock.json'));
+    assert.strictEqual(lock.packages['packages/cli'].version, '1.1.0');
+    assert.strictEqual(lock.packages['packages/web'].version, '4.0.0');
+    assert.strictEqual(lock.packages[''].version, undefined);
+  });
+
+  it('leaves a root lockfile alone when it does not list the package', () => {
+    tmpfs.mock({});
+    tmpfs.writeFile('.git/HEAD', 'ref: refs/heads/main\n');
+    const before = JSON.stringify(rootLock(), null, 2) + '\n';
+    tmpfs.writeFile('package-lock.json', before);
+    tmpfs.writeFile('other/thing/package.json', '{\n  "name": "thing",\n  "version": "1.0.0"\n}\n');
+
+    assert.deepStrictEqual(writeVersion(tmpfs.fullPath('other/thing'), '1.0.1'), [
+      'package.json',
+    ]);
+    assert.strictEqual(read('package-lock.json'), before);
+  });
+
+  it('does not look above a package at the repository root', () => {
+    tmpfs.mock({});
+    tmpfs.writeFile('package-lock.json', JSON.stringify(rootLock(), null, 2) + '\n');
+    tmpfs.writeFile('repo/.git/HEAD', 'ref: refs/heads/main\n');
+    tmpfs.writeFile('repo/package.json', '{\n  "name": "repo",\n  "version": "1.0.0"\n}\n');
+
+    assert.deepStrictEqual(writeVersion(tmpfs.fullPath('repo'), '1.0.1'), ['package.json']);
+  });
+
+  it('does not look above the repository root', () => {
+    tmpfs.mock({});
+    tmpfs.writeFile('package-lock.json', JSON.stringify(rootLock(), null, 2) + '\n');
+    tmpfs.writeFile('repo/.git/HEAD', 'ref: refs/heads/main\n');
+    tmpfs.writeFile('repo/packages/cli/package.json', '{\n  "name": "cli",\n  "version": "1.0.0"\n}\n');
+
+    assert.deepStrictEqual(writeVersion(tmpfs.fullPath('repo/packages/cli'), '1.1.0'), [
+      'package.json',
+    ]);
+  });
+});

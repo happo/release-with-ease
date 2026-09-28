@@ -200,6 +200,31 @@ describe('releasing one package of a monorepo from its root', () => {
     ]);
   }, 30_000);
 
+  it('stops before anything else when the tags cannot be fetched', async () => {
+    tmpfs.mock({});
+    const repo = initRepo();
+    repo.commit(
+      { 'package.json': JSON.stringify({ name: 'pkg', version: '1.0.0', private: true }) },
+      'Add package',
+    );
+    repo.publish();
+    repo.git('remote', 'set-url', 'origin', tmpfs.fullPath('nowhere.git'));
+    const before = repo.sha('HEAD');
+
+    fakeGh.install({ releaseUrl: 'unused' });
+    const claude = await fakeClaude({ bump: 'patch', reasoning: 'A fix.', notes: ['Fix'] });
+
+    const result = await runCli(
+      [],
+      { ANTHROPIC_API_KEY: 'test-key', ANTHROPIC_BASE_URL: claude.url },
+      'y\n',
+    );
+    assert.strictEqual(result.code, 1);
+    assert.match(result.stderr, /Could not fetch tags from origin/);
+    assert.strictEqual(claude.asked.length, 0);
+    assert.strictEqual(repo.sha('HEAD'), before);
+  }, 30_000);
+
   it('stops before changing anything when the new tag already exists', async () => {
     tmpfs.mock({});
     const repo = initRepo();

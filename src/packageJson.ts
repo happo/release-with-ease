@@ -25,8 +25,42 @@ function rewriteJson(file: string, update: (data: Record<string, unknown>) => vo
 }
 
 /**
+ * The npm lockfile of the workspace `dir` belongs to, found by walking up to
+ * the repository root, or null. Only a lockfile that lists `dir` as one of
+ * its packages counts.
+ */
+function workspaceLockfile(dir: string): { file: string; key: string } | null {
+  const packageDir = path.resolve(dir);
+  // A package at the repository root is the workspace root itself.
+  if (fs.existsSync(path.join(packageDir, '.git'))) return null;
+  let current = path.dirname(packageDir);
+  for (;;) {
+    for (const lockfile of LOCKFILES) {
+      const file = path.join(current, lockfile);
+      if (!fs.existsSync(file)) continue;
+      // Lockfile keys use forward slashes whatever the platform.
+      const key = path.relative(current, packageDir).split(path.sep).join('/');
+      try {
+        const data = JSON.parse(fs.readFileSync(file, 'utf8')) as {
+          packages?: Record<string, unknown>;
+        };
+        if (data.packages?.[key]) return { file, key };
+      } catch {
+        // Not ours to fix; the release goes ahead without it.
+      }
+      return null;
+    }
+    const parent = path.dirname(current);
+    if (parent === current || fs.existsSync(path.join(current, '.git'))) return null;
+    current = parent;
+  }
+}
+
+/**
  * Sets `version` in the package.json in `dir`, and in an npm lockfile beside
- * it if there is one. Returns the files it changed, relative to `dir`.
+ * it if there is one — or, for a package in an npm workspace, in the
+ * workspace's lockfile at the root. Returns the files it changed, relative to
+ * `dir`.
  *
  * This is the part of `npm version` the release needs, done directly. The
  * script already committed and tagged by itself (`npm version` can only make
@@ -53,6 +87,19 @@ export function writeVersion(dir: string, version: string): Array<string> {
       if (root) root['version'] = version;
     });
     changed.push(lockfile);
+  }
+
+  if (changed.length === 1) {
+    const workspace = workspaceLockfile(dir);
+    if (workspace) {
+      rewriteJson(workspace.file, data => {
+        const entry = (data['packages'] as Record<string, Record<string, unknown>>)[
+          workspace.key
+        ];
+        if (entry) entry['version'] = version;
+      });
+      changed.push(path.relative(dir, workspace.file));
+    }
   }
 
   return changed;

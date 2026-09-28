@@ -104,7 +104,13 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
   const paths = pathArgs.length ? pathArgs : configuredPaths(pkg);
   const tagPrefix = configuredTagPrefix(pkg);
 
-  fetchOriginTags();
+  // The check below for a tag that already exists, and finding the last
+  // release at all, only see the tags that are here locally.
+  if (fetchOriginTags() === null) {
+    throw new Error(
+      'Could not fetch tags from origin. Check your connection and access to the remote, then try again.',
+    );
+  }
   const { defaultBranch } = preflightChecks();
   const { tag: lastVersionTag, fromDefaultPrefix } = getLastReleaseTag(tagPrefix, pkg.version);
   if (fromDefaultPrefix) {

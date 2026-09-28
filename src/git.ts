@@ -127,8 +127,8 @@ export interface LastRelease {
  * The tag of the last release, under the configured prefix. A package that
  * has just moved to a prefix of its own has no tags under it yet, and falling
  * back to "the last 100 commits" would write its first prefixed release notes
- * from far too much history — so in that case the `v` tag for the version
- * package.json is at now stands in for it. Only that exact tag: a nearer `v`
+ * from far too much history — so in that case the `v` tag for the current
+ * version in package.json stands in for the prefixed one. Only that exact tag: a nearer `v`
  * tag could just as well belong to another package in the same repository.
  * And only if HEAD descends from it, since a tag on a branch that never
  * merged would make `<tag>..HEAD` the whole mainline.
