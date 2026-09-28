@@ -1,4 +1,5 @@
 import assert from 'node:assert';
+
 import { afterEach, describe, it } from 'vitest';
 
 import { hasReadmeChangelog, insertChangelogEntry, readmePath } from '../changelog.ts';

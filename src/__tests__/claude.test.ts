@@ -1,7 +1,8 @@
 import assert from 'node:assert';
 import http from 'node:http';
-import { afterEach, describe, it } from 'vitest';
 import type { AddressInfo } from 'node:net';
+
+import { afterEach, describe, it } from 'vitest';
 
 import {
   askClaudeForRelease,
@@ -130,11 +131,11 @@ describe('parseReleaseSuggestion', () => {
   });
 
   it('strips a ```json fence', () => {
-    assert.strictEqual(parseReleaseSuggestion('```json\n' + valid + '\n```', commits).bump, 'minor');
+    assert.strictEqual(parseReleaseSuggestion(`\`\`\`json\n${  valid  }\n\`\`\``, commits).bump, 'minor');
   });
 
   it('strips a bare ``` fence', () => {
-    assert.strictEqual(parseReleaseSuggestion('```\n' + valid + '\n```', commits).bump, 'minor');
+    assert.strictEqual(parseReleaseSuggestion(`\`\`\`\n${  valid  }\n\`\`\``, commits).bump, 'minor');
   });
 
   it('tolerates surrounding whitespace', () => {

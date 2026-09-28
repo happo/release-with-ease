@@ -1,6 +1,8 @@
 import assert from 'node:assert';
+
 import { afterEach, describe, it } from 'vitest';
 
+import { getCommitRange, parseCommits } from '../git.ts';
 import {
   chainByBranchNames,
   encodeRef,
@@ -11,7 +13,6 @@ import {
   orderStack,
   type PullRequest,
 } from '../github.ts';
-import { getCommitRange, parseCommits } from '../git.ts';
 import * as fakeGh from '../test-utils/fakeGh.ts';
 import { initRepo, mergeTwoDeepStack, type Repo } from '../test-utils/gitRepo.ts';
 import * as tmpfs from '../test-utils/tmpfs.ts';

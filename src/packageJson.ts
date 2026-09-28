@@ -19,7 +19,7 @@ function rewriteJson(file: string, update: (data: Record<string, unknown>) => vo
   let out = JSON.stringify(data, null, indent);
   // Newlines inside string values are escaped by JSON.stringify, so every
   // literal one left in the output is formatting.
-  if (eol !== '\n') out = out.replace(/\n/g, eol);
+  if (eol !== '\n') out = out.replaceAll('\n', eol);
   if (/\n$/.test(raw)) out += eol;
   fs.writeFileSync(file, out);
 }

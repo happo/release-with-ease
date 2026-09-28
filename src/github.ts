@@ -1,5 +1,5 @@
 import { safeRun } from './exec.ts';
-import { pathspecSuffix, shellQuote, type Commit } from './git.ts';
+import { type Commit,pathspecSuffix, shellQuote } from './git.ts';
 
 export interface PullRequest {
   number: number;
@@ -200,7 +200,7 @@ export function fetchGitHubMeta(
       prNumber: extractPrNumber(c.subject, c.body),
     }));
   }
-  const [owner, repo] = repoRes.out.trim().split('/');
+  const [owner, repo] = repoRes.out.trim().split('/', 2);
 
   // SHA → GitHub login via compare API (best-effort)
   const shaToLogin: Record<string, string> = {};
@@ -210,7 +210,7 @@ export function fetchGitHubMeta(
     );
     if (cmpRes.ok) {
       for (const line of cmpRes.out.trim().split('\n').filter(Boolean)) {
-        const [sha, login] = line.split('\t');
+        const [sha, login] = line.split('\t', 2);
         if (sha && login) shaToLogin[sha] = login;
       }
     }

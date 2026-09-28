@@ -1,12 +1,13 @@
 import assert from 'node:assert';
+
 import { afterEach, describe, it } from 'vitest';
 
 import {
   configuredPaths,
   configuredTagPrefix,
   parseArgs,
-  UsageError,
   unscopedSubdirectoryWarning,
+  UsageError,
 } from '../args.ts';
 import { initRepo } from '../test-utils/gitRepo.ts';
 import * as tmpfs from '../test-utils/tmpfs.ts';

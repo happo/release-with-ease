@@ -52,7 +52,7 @@ export function install(options: FakeGhOptions = {}): void {
     write('defaultBranch', `${options.defaultBranch}\n`);
   }
   if (options.compare !== undefined) {
-    write('compare', options.compare.map(row => row.join('\t')).join('\n') + '\n');
+    write('compare', `${options.compare.map(row => row.join('\t')).join('\n')  }\n`);
   }
   if (options.releaseUrl !== undefined) {
     write('releaseUrl', `${options.releaseUrl}\n`);

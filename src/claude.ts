@@ -1,5 +1,5 @@
-import { isBump, type Bump } from './version.ts';
 import type { CommitWithMeta } from './github.ts';
+import { type Bump,isBump } from './version.ts';
 
 export interface OmittedChange {
   commit: CommitWithMeta;
@@ -52,7 +52,7 @@ const MAX_BODY_LENGTH = 2000;
  * own, which would hand the text after it to the wrong id.
  */
 function escapeChangeTags(text: string): string {
-  return text.replace(/<(\/?)change\b/gi, '&lt;$1change');
+  return text.replaceAll(/<(\/?)change\b/gi, '&lt;$1change');
 }
 
 /**
@@ -66,7 +66,7 @@ export function buildUserContent(commits: ReadonlyArray<CommitWithMeta>): string
     .map((c, i) => {
       const body = c.body ? c.body.trim() : '';
       const truncatedBody =
-        body.length > MAX_BODY_LENGTH ? body.slice(0, MAX_BODY_LENGTH) + '…' : body;
+        body.length > MAX_BODY_LENGTH ? `${body.slice(0, MAX_BODY_LENGTH)  }…` : body;
       const meta: Array<string> = [];
       if (c.githubLogin) meta.push(`by @${c.githubLogin}`);
       if (c.prNumber) meta.push(`in #${c.prNumber}`);
@@ -137,7 +137,7 @@ export function parseReleaseSuggestion(
     if (typeof note === 'string') return `- ${note}`;
     const { text, changes } = (note ?? {}) as RawNote;
     if (typeof text !== 'string') {
-      throw new Error('Invalid note in Claude response');
+      throw new TypeError('Invalid note in Claude response');
     }
     if (Array.isArray(changes)) {
       for (const value of changes) {
@@ -283,7 +283,7 @@ export async function askClaudeForRelease(
         output_config: { effort: 'low' },
         // Any thinking it does still counts against this, on top of complete
         // notes for a busy release.
-        max_tokens: 16000,
+        max_tokens: 16_000,
         system: buildSystemPrompt(isPublicPackage),
         messages: [{ role: 'user', content: buildUserContent(commits) }],
       }),

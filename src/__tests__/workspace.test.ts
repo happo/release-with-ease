@@ -1,5 +1,6 @@
 import assert from 'node:assert';
 import fs from 'node:fs';
+
 import { afterEach, describe, it } from 'vitest';
 
 import { UsageError } from '../args.ts';

@@ -1,5 +1,6 @@
 import assert from 'node:assert';
 import { execSync } from 'node:child_process';
+
 import { afterEach, describe, it } from 'vitest';
 
 import {
@@ -37,7 +38,7 @@ describe('shellQuote', () => {
     execSync(`printf %s ${shellQuote(value)}`, { encoding: 'utf8', shell: '/bin/sh' });
 
   it('escapes an embedded single quote so the shell cannot break out', () => {
-    assert.strictEqual(shellQuote("it's"), "'it'\\''s'");
+    assert.strictEqual(shellQuote("it's"), String.raw`'it'\''s'`);
     assert.strictEqual(echoed("it's"), "it's");
   });
 
@@ -77,7 +78,7 @@ describe('parseCommits', () => {
   });
 
   it('splits records and fields on the separators git was told to use', () => {
-    const raw = 'abc\x1fSubject one\x1fBody one\x1e\ndef\x1fSubject two\x1f\x1e';
+    const raw = 'abc\u{1F}Subject one\u{1F}Body one\u{1E}\ndef\u{1F}Subject two\u{1F}\u{1E}';
     assert.deepStrictEqual(parseCommits(raw), [
       { hash: 'abc', subject: 'Subject one', body: 'Body one' },
       { hash: 'def', subject: 'Subject two', body: '' },
@@ -85,7 +86,7 @@ describe('parseCommits', () => {
   });
 
   it('keeps a multi-line body in one record', () => {
-    const parsed = parseCommits('abc\x1fSubject\x1fline one\nline two\x1e');
+    const parsed = parseCommits('abc\u{1F}Subject\u{1F}line one\nline two\u{1E}');
     assert.strictEqual(parsed[0]?.body, 'line one\nline two');
   });
 });

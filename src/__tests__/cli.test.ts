@@ -1,4 +1,5 @@
 import assert from 'node:assert';
+
 import { describe, it } from 'vitest';
 
 import { buildEditorContent, formatCommitLine, stripEditorComments } from '../cli.ts';

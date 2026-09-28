@@ -172,7 +172,7 @@ export function pushRelease(branch: string, release: ReleaseName): void {
  * before git ever saw it — has to be quoted.
  */
 export function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, `'\\''`)}'`;
+  return `'${value.replaceAll('\'', String.raw`'\''`)}'`;
 }
 
 /**
@@ -219,11 +219,11 @@ export function getCommitRange(
 export function parseCommits(raw: string): Array<Commit> {
   if (!raw) return [];
   return raw
-    .split('\x1e')
+    .split('\u{1E}')
     .map(chunk => chunk.trim())
     .filter(Boolean)
     .map(chunk => {
-      const [hash, subject, body] = chunk.split('\x1f');
+      const [hash, subject, body] = chunk.split('\u{1F}', 3);
       return { hash: hash ?? '', subject: subject || '', body: body || '' };
     });
 }

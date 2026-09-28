@@ -26,18 +26,18 @@ import path from 'node:path';
 import {
   configuredPaths,
   configuredTagPrefix,
-  parseArgs,
-  UsageError,
-  unscopedSubdirectoryWarning,
   type PackageJson,
+  parseArgs,
+  unscopedSubdirectoryWarning,
+  UsageError,
 } from './args.ts';
-import { askClaudeForRelease, type OmittedChange } from './claude.ts';
 import {
   hasReadmeChangelog,
   insertChangelogEntry,
   packageJsonPath,
   readmePath,
 } from './changelog.ts';
+import { askClaudeForRelease, type OmittedChange } from './claude.ts';
 import { run, safeRun } from './exec.ts';
 import {
   commitAndTagRelease,
@@ -50,12 +50,12 @@ import {
   shellQuote,
   tagExists,
 } from './git.ts';
-import { fetchGitHubMeta, type CommitWithMeta } from './github.ts';
+import { type CommitWithMeta,fetchGitHubMeta } from './github.ts';
 import { fetchNpmOtp } from './npm.ts';
 import { writeVersion } from './packageJson.ts';
 import { prompt } from './prompt.ts';
 import { releaseName } from './tags.ts';
-import { bumpVersionString, isBump, type Bump } from './version.ts';
+import { type Bump,bumpVersionString, isBump } from './version.ts';
 import { resolvePackageDir } from './workspace.ts';
 
 /**
@@ -64,7 +64,7 @@ import { resolvePackageDir } from './workspace.ts';
  * something.
  */
 export function formatCommitLine(commit: CommitWithMeta): string {
-  const shortSha = commit.hash.substring(0, 7);
+  const shortSha = commit.hash.slice(0, 7);
   const pr =
     commit.prNumber && !commit.subject.includes(`#${commit.prNumber}`)
       ? ` (#${commit.prNumber})`
@@ -207,7 +207,7 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
       paths.length ? ` (limited to ${paths.join(', ')})` : ''
     }:`,
   );
-  commits.forEach(commit => console.log(formatCommitLine(commit)));
+  for (const commit of commits) console.log(formatCommitLine(commit));
 
   console.log('\nWaiting for Claude to analyze commits...');
 

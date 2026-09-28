@@ -3,14 +3,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-let originalCwd: string = '';
-let tempDir: string = '';
+let originalCwd = '';
+let tempDir = '';
 
 interface Files {
   [key: string]: string | Files;
 }
 
-function flattenFiles(files: Files, prefix: string = ''): Record<string, string> {
+function flattenFiles(files: Files, prefix = ''): Record<string, string> {
   const flattened: Record<string, string> = {};
 
   for (const [filePath, content] of Object.entries(files)) {

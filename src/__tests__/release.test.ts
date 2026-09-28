@@ -2,9 +2,10 @@ import assert from 'node:assert';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { AddressInfo } from 'node:net';
+
 import { afterEach, describe, it } from 'vitest';
 
 import * as fakeGh from '../test-utils/fakeGh.ts';
@@ -92,9 +93,9 @@ describe('releasing one package of a monorepo from its root', () => {
     const repo = initRepo();
     repo.commit(
       {
-        'package.json': JSON.stringify({ name: 'root', private: true }, null, 2) + '\n',
+        'package.json': `${JSON.stringify({ name: 'root', private: true }, null, 2)  }\n`,
         'projects/server/package.json':
-          JSON.stringify(
+          `${JSON.stringify(
             {
               name: 'server',
               version: '1.0.0',
@@ -103,10 +104,10 @@ describe('releasing one package of a monorepo from its root', () => {
             },
             null,
             2,
-          ) + '\n',
+          )  }\n`,
         'projects/server/README.md': '# server\n\n# Changelog\n\n## 1.0.0\n\n- First\n',
         'projects/worker/package.json':
-          JSON.stringify({ name: 'worker', version: '3.0.0', private: true }, null, 2) + '\n',
+          `${JSON.stringify({ name: 'worker', version: '3.0.0', private: true }, null, 2)  }\n`,
       },
       'Add projects',
     );
@@ -180,7 +181,7 @@ describe('releasing one package of a monorepo from its root', () => {
     repo.commit(
       {
         'package.json':
-          JSON.stringify({ name: 'solo', version: '2.7.2', private: true }, null, 2) + '\n',
+          `${JSON.stringify({ name: 'solo', version: '2.7.2', private: true }, null, 2)  }\n`,
       },
       'Add package',
     );
@@ -241,7 +242,7 @@ describe('releasing one package of a monorepo from its root', () => {
     repo.commit(
       {
         'package.json':
-          JSON.stringify(
+          `${JSON.stringify(
             {
               name: 'pkg',
               version: '1.0.0',
@@ -250,7 +251,7 @@ describe('releasing one package of a monorepo from its root', () => {
             },
             null,
             2,
-          ) + '\n',
+          )  }\n`,
       },
       'Add package',
     );
