@@ -70,10 +70,10 @@ describe('buildEditorContent', () => {
         '',
         '- Add a thing',
         '',
-        '<!-- Lines like this one are discarded when the editor closes. -->',
-        '<!-- Not covered by any bullet point above; add any that users should hear about: -->',
-        '<!--   0e3c3fb Bump CI action (#7): CI only -->',
-        '<!--   0e3c3fb Retry stalled uploads (#8): (no reason given) -->',
+        '// Lines starting with // are discarded when the editor closes.',
+        '// Not covered by any bullet point above; add any that users should hear about:',
+        '//   0e3c3fb Bump CI action (#7): CI only',
+        '//   0e3c3fb Retry stalled uploads (#8): (no reason given)',
         '',
       ].join('\n'),
     );
@@ -82,7 +82,7 @@ describe('buildEditorContent', () => {
   it('says so when every change is covered', () => {
     assert.match(
       buildEditorContent(entry, []),
-      /^<!-- Every change in this release is covered by a bullet point above\. -->$/m,
+      /^\/\/ Every change in this release is covered by a bullet point above\.$/m,
     );
   });
 });
@@ -113,16 +113,14 @@ describe('stripEditorComments', () => {
   it('drops the remaining comments when some of them were deleted', () => {
     const content = buildEditorContent('## 1.2.0\n\n- Add a thing\n', omitted)
       .split('\n')
-      .filter(line => !line.includes('discarded when the editor closes'))
+      .filter(line => !line.includes('are discarded when the editor closes'))
       .join('\n');
     assert.strictEqual(stripEditorComments(content), '## 1.2.0\n\n- Add a thing');
   });
 
-  it('keeps a comment that spans several lines', () => {
-    assert.strictEqual(
-      stripEditorComments('## 1.2.0\n\n- Add a thing\n<!--\nnote to self\n-->\n'),
-      '## 1.2.0\n\n- Add a thing\n<!--\nnote to self\n-->',
-    );
+  it('keeps an HTML comment and an indented // in a code sample', () => {
+    const entry = '## 1.2.0\n\n- Add a thing:\n\n  ```js\n  // set this\n  ```\n<!-- note -->';
+    assert.strictEqual(stripEditorComments(entry), entry);
   });
 
   it('leaves content without comments alone, apart from surrounding whitespace', () => {

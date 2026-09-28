@@ -62,19 +62,23 @@ export function formatCommitLine(commit: CommitWithMeta): string {
   return `  ${shortSha} ${commit.subject}${pr}`;
 }
 
-/** One line of editor-only context: an HTML comment that is a line of its own. */
-function editorComment(text: string): string {
-  return `<!-- ${text} -->`;
-}
+/**
+ * Starts a line of editor-only context, the way `#` does in a git commit
+ * message. `#` itself would take the entry's `## x.y.z` heading with it.
+ */
+const EDITOR_COMMENT_PREFIX = '//';
 
-const EDITOR_COMMENT_LINE = /^<!--.*-->$/;
+function editorComment(text: string): string {
+  return `${EDITOR_COMMENT_PREFIX} ${text}`;
+}
 
 /**
  * What the editor opens with: the entry to publish, then the changes no
  * bullet point covers, so a change left out is a line to read rather than
  * something to notice missing. Each line of that context is a comment of its
  * own and is dropped on its own, so deleting or moving some of them can't
- * leave the rest behind in the release notes.
+ * leave the rest behind in the release notes, and turning one into a bullet
+ * point is a matter of editing that line.
  */
 export function buildEditorContent(
   entry: string,
@@ -91,22 +95,23 @@ export function buildEditorContent(
   return [
     entry.trimEnd(),
     '',
-    editorComment('Lines like this one are discarded when the editor closes.'),
+    editorComment(
+      `Lines starting with ${EDITOR_COMMENT_PREFIX} are discarded when the editor closes.`,
+    ),
     ...context.map(editorComment),
     '',
   ].join('\n');
 }
 
 /**
- * The entry as edited, without the editor-only context: every line that is a
- * whole HTML comment on its own. That takes a one-line comment someone wrote
- * themselves along with it, which is no loss, since a comment never shows up
- * in the rendered notes anyway.
+ * The entry as edited, without the editor-only context: every line that starts
+ * with the comment prefix. Only at the very start of a line, so an indented
+ * `//` in a code sample stays.
  */
 export function stripEditorComments(content: string): string {
   return content
     .split('\n')
-    .filter(line => !EDITOR_COMMENT_LINE.test(line.trim()))
+    .filter(line => !line.startsWith(EDITOR_COMMENT_PREFIX))
     .join('\n')
     .trim();
 }
