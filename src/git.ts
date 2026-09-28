@@ -1,4 +1,4 @@
-import { safeRun } from './exec.ts';
+import { run, safeRun } from './exec.ts';
 
 export interface Commit {
   hash: string;
@@ -99,6 +99,37 @@ export function preflightChecks(): { defaultBranch: string } {
   }
 
   return { defaultBranch };
+}
+
+/** The current commit, for restoring local state if a release fails partway through. */
+export function getCurrentCommit(): string {
+  return run('git rev-parse HEAD').trim();
+}
+
+/**
+ * What origin currently has for a branch, straight from the remote rather
+ * than the local remote-tracking ref. Null means the remote could not be
+ * asked (or has no such branch), which is different from "unchanged".
+ */
+export function getRemoteBranchCommit(branch: string): string | null {
+  const res = safeRun(`git ls-remote origin "refs/heads/${branch}"`);
+  if (!res.ok) return null;
+  const sha = res.out.trim().split(/\s+/)[0];
+  return sha || null;
+}
+
+/**
+ * Discards any local commits made since `ref` and deletes `tag` if it was
+ * created, without touching origin. Only meant to run once origin is known
+ * not to have the release — `preflightChecks` already guarantees the working
+ * tree was clean and in sync with origin at `ref`, so this can only be
+ * undoing commits/tags this run made itself. Both steps are always
+ * attempted; the result is true only if both worked.
+ */
+export function rollbackLocalRelease(ref: string, tag: string | null): boolean {
+  const tagDeleted = tag ? safeRun(`git tag -d "${tag}"`).ok : true;
+  const reset = safeRun(`git reset --hard ${ref}`).ok;
+  return tagDeleted && reset;
 }
 
 export function getLastVersionTag(): string | null {
