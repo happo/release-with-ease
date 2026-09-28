@@ -38,7 +38,17 @@ async function fakeClaude(suggestion: unknown): Promise<{ url: string; asked: Ar
     req.on('end', () => {
       asked.push(JSON.parse(body).messages[0].content);
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ content: [{ text: JSON.stringify(suggestion) }] }));
+      // Shaped like a real reply: the answer is a text block after a
+      // thinking one.
+      res.end(
+        JSON.stringify({
+          stop_reason: 'end_turn',
+          content: [
+            { type: 'thinking', thinking: '' },
+            { type: 'text', text: JSON.stringify(suggestion) },
+          ],
+        }),
+      );
     });
   });
   await new Promise<void>(resolve => server?.listen(0, '127.0.0.1', resolve));
