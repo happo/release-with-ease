@@ -18,7 +18,26 @@ npx release-with-ease --dry-run
 ```
 
 The script reads `package.json` and `README.md` from the current directory, so
-run it from the package you want to release.
+run it from the package you want to release — or name the package, and it
+finds it (see [Monorepos](#monorepos)):
+
+```sh
+npx release-with-ease my-package
+```
+
+A release:
+
+1. inserts the release notes into the `# Changelog` section of `README.md`, if
+   there is one, and commits that;
+2. sets `"version"` in `package.json` (and in `package-lock.json` or
+   `npm-shrinkwrap.json`, if there is one next to it), commits it and tags the
+   commit;
+3. pushes the branch and that tag;
+4. creates a GitHub release for the tag;
+5. publishes to npm, unless the package is private.
+
+The version is written to `package.json` directly rather than through
+`npm version`, so `preversion`, `version` and `postversion` scripts are not run.
 
 # How commits become release notes
 
@@ -65,14 +84,14 @@ release of one package is described using changes to all the others, and
 nothing about the result looks wrong afterwards.
 
 Pass `--path` to limit the commits to the ones that touched a path. It takes a
-git pathspec, interpreted relative to the current directory, and can be
-repeated:
+git pathspec, interpreted relative to the current directory (the package's own,
+when a package is named), and can be repeated:
 
 ```sh
 cd packages/cli
 npx release-with-ease --path .
 
-# or, from anywhere in the repository
+# or, releasing the package at the repository root
 npx release-with-ease --path packages/cli --path packages/shared
 ```
 
@@ -90,16 +109,63 @@ A `--path` flag on the command line overrides the configured paths. The script
 warns when it is releasing a package from a subdirectory with no paths set at
 all, since that is nearly always an oversight rather than a choice.
 
-Two things stay repository-wide, because git tags are:
+## Tag prefixes
 
-- The last release is found with `git describe --match "v[0-9]*.[0-9]*.[0-9]*"`,
-  and `npm version` creates tags of the same shape. Releasing two packages from
-  one repository would have them share a version series.
-- The GitHub release created at the end covers the tag, not the path.
+Tags are `vX.Y.Z` by default, which is one series of versions for the whole
+repository. For more than one package to release from the same repository,
+each needs a series of its own. Set `tagPrefix`, conventionally to the
+package's name and an `@`:
 
-So this works well for a monorepo with one publishable package, and needs
-per-package tag prefixes — which the script does not support yet — for more
-than one.
+```json
+{
+  "name": "my-cli",
+  "release-with-ease": { "paths": ["."], "tagPrefix": "my-cli@" }
+}
+```
+
+The package's last release is then the most recent `my-cli@X.Y.Z` tag, the next
+one is tagged `my-cli@X.Y.Z`, and its GitHub release is titled `my-cli X.Y.Z`.
+Commit messages use the whole tag (`Update changelog for my-cli@1.3.0`,
+`my-cli@1.3.0`), since a bare version does not say which package it was. Only
+the new tag is pushed, not every tag that happens to exist locally.
+
+Switching an existing package over needs no new tag by hand: when there is no
+`my-cli@` tag yet, the `v` tag for the current version in `package.json` (say
+`v1.2.0`) is where the release notes start from, and the release after it is
+`my-cli@1.3.0`.
+
+A prefix has to make a valid git tag once a version is appended, so `:`,
+spaces and glob characters are refused.
+
+## Releasing from the repository root
+
+Name the package to release, and the script runs in that package's directory
+as if it had been started there:
+
+```sh
+npx release-with-ease my-cli
+npx release-with-ease packages/cli   # a directory works too
+```
+
+A name is looked up among the `package.json` files git tracks, so it works with
+any workspace layout. Everything else — `package.json`, `README.md`, `--path`,
+the configured paths — is then relative to that package.
+
+A root script makes that `pnpm release <package>`, with the environment
+variables from the root `.env`:
+
+```json
+{
+  "scripts": {
+    "release": "set -a && . ./.env && set +a && release-with-ease"
+  }
+}
+```
+
+```sh
+pnpm release my-cli
+pnpm release my-cli --dry-run
+```
 
 # Prerequisites
 
@@ -179,18 +245,17 @@ Node and pnpm versions are pinned in `mise.toml`, so
 ```sh
 mise install
 pnpm install
-pnpm test    # node --test, straight from the TypeScript sources
+pnpm test    # Vitest, straight from the TypeScript sources
 pnpm tsc     # type-check everything, including the tests
 pnpm build   # compile src/ to dist/
 ```
 
 Working on the package needs a newer Node than using it does: the tests run
-the TypeScript sources directly through Node's type stripping, which wants
-22.18 or newer, while the published JavaScript only needs what `engines` says.
-CI checks both.
+under Vitest, which wants Node 22.12+ or 24+, while the published JavaScript
+only needs what `engines` says. CI checks both.
 
-Tests use Node's built-in test runner and no test framework. Rather than
-mocking, they build real git repositories in a temporary directory and run
+Tests assert with `node:assert` and mock nothing. Instead, they build real
+git repositories in a temporary directory and run
 real `git` against them, so the merge shapes under test — a stack landing as
 one commit, a branch behind its origin — are the shapes git actually
 produces. Where an external command has to be stood in for, it is stood in

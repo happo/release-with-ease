@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 import http from 'node:http';
-import { afterEach, describe, it } from 'node:test';
+import { afterEach, describe, it } from 'vitest';
 import type { AddressInfo } from 'node:net';
 
 import {

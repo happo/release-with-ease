@@ -1,8 +1,9 @@
 import assert from 'node:assert';
-import { afterEach, describe, it } from 'node:test';
+import { afterEach, describe, it } from 'vitest';
 
 import {
   chainByBranchNames,
+  encodeRef,
   extractPrNumber,
   fetchGitHubMeta,
   filterStackByPaths,
@@ -472,5 +473,17 @@ describe('against a real merged stack', () => {
 
       assert.strictEqual(analyze()[0]?.githubLogin, 'lencioni');
     });
+  });
+});
+
+describe('encodeRef', () => {
+  it('leaves an ordinary tag alone', () => {
+    assert.strictEqual(encodeRef('v1.2.3'), 'v1.2.3');
+  });
+
+  it('keeps the slashes of a scoped tag but encodes what a URL would misread', () => {
+    assert.strictEqual(encodeRef('@happo/cli@1.0.0'), '%40happo/cli%401.0.0');
+    assert.strictEqual(encodeRef('server#1.0.0'), 'server%231.0.0');
+    assert.strictEqual(encodeRef('a%b@1.0.0'), 'a%25b%401.0.0');
   });
 });

@@ -1,5 +1,5 @@
 import assert from 'node:assert';
-import { afterEach, describe, it } from 'node:test';
+import { afterEach, describe, it } from 'vitest';
 
 import { hasReadmeChangelog, insertChangelogEntry, readmePath } from '../changelog.ts';
 import * as tmpfs from '../test-utils/tmpfs.ts';
