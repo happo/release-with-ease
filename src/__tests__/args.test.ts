@@ -125,9 +125,9 @@ describe('configuredTagPrefix', () => {
     );
   });
 
-  // Each of these either makes an invalid ref or would be read as a pattern
-  // by `git describe --match`.
-  for (const prefix of ['server:', 'my server@', 'server*', 'server?', 'server[', 'a..b@', '@{']) {
+  // Each of these makes an invalid ref, would be read as a pattern by
+  // `git describe --match`, or (a leading dash) as an option by `git tag`.
+  for (const prefix of ['server:', 'my server@', 'server*', 'server?', 'server[', 'a..b@', '@{', '-rc@']) {
     it(`refuses ${JSON.stringify(prefix)}`, () => {
       assert.throws(
         () => configuredTagPrefix({ 'release-with-ease': { tagPrefix: prefix } }),

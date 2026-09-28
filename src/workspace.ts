@@ -18,13 +18,16 @@ export function resolvePackageDir(nameOrDir: string, cwd: string = process.cwd()
   const asDir = path.resolve(cwd, nameOrDir);
   if (fs.existsSync(path.join(asDir, 'package.json'))) return asDir;
 
-  const rootRes = safeRun('git rev-parse --show-toplevel', { cwd });
+  // --show-cdup rather than --show-toplevel: the latter is the resolved real
+  // path, which differs from a cwd reached through a symlink, and the caller
+  // compares the result against its cwd.
+  const rootRes = safeRun('git rev-parse --show-cdup', { cwd });
   if (!rootRes.ok) {
     throw new UsageError(
       `There is no package.json in "${nameOrDir}", and this is not a git repository to look for a package named "${nameOrDir}" in.`,
     );
   }
-  const root = rootRes.out.trim();
+  const root = path.resolve(cwd, rootRes.out.trim());
 
   const listRes = safeRun(`git ls-files -z -- ${shellQuote(':(glob)**/package.json')}`, {
     cwd: root,

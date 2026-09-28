@@ -31,4 +31,8 @@ describe('releaseName', () => {
   it('uses the tag as the title for any other prefix', () => {
     assert.strictEqual(releaseName('server-v', '1.0.0').title, 'server-v1.0.0');
   });
+
+  it('does not make a nameless title from a bare @', () => {
+    assert.strictEqual(releaseName('@', '1.0.0').title, '@1.0.0');
+  });
 });

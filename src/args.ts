@@ -99,7 +99,12 @@ export function configuredTagPrefix(pkg: PackageJson): string {
       '"release-with-ease".tagPrefix in package.json must be a non-empty string, e.g. "my-package@".',
     );
   }
-  if (!safeRun(`git check-ref-format ${shellQuote(`refs/tags/${raw}1.0.0`)}`).ok) {
+  // A leading dash would make the tag read as an option to `git tag` and
+  // `gh release create`, which only fail after the changelog is committed.
+  if (
+    raw.startsWith('-') ||
+    !safeRun(`git check-ref-format ${shellQuote(`refs/tags/${raw}1.0.0`)}`).ok
+  ) {
     throw new UsageError(
       `"release-with-ease".tagPrefix in package.json is "${raw}", which does not make a valid git tag.`,
     );

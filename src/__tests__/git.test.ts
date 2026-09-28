@@ -205,6 +205,21 @@ describe('against a real repository', () => {
       });
     });
 
+    it('does not take the v tag from a branch that never merged', () => {
+      tmpfs.mock({});
+      const repo = initRepo();
+      repo.git('checkout', '-b', 'release-branch');
+      repo.commit({ 'a.txt': 'a' }, 'Only on the release branch');
+      repo.git('tag', 'v2.7.2');
+      repo.git('checkout', 'main');
+      repo.commit({ 'b.txt': 'b' }, 'On main');
+
+      assert.deepStrictEqual(getLastReleaseTag('pkg@', '2.7.2'), {
+        tag: null,
+        fromDefaultPrefix: false,
+      });
+    });
+
     it('does not take a v tag for some other version', () => {
       // In a repository several packages release from, a nearby v tag says
       // nothing about this package.
@@ -400,6 +415,16 @@ describe('against a real repository', () => {
       assert.deepStrictEqual(subjects(getCommitRange('v1.0.0', ['packages/cli'])), [
         'Land the stack (#2)',
       ]);
+    });
+
+    it('passes a tag with shell characters in it through to git intact', () => {
+      // Valid in a ref name, so a tagPrefix can bring them in.
+      tmpfs.mock({});
+      const repo = initRepo();
+      repo.git('tag', 'a$x;b@1.0.0');
+      repo.commit({ 'a.txt': 'a' }, 'Add a');
+
+      assert.deepStrictEqual(subjects(getCommitRange('a$x;b@1.0.0')), ['Add a']);
     });
 
     it('accepts a pathspec containing a space', () => {

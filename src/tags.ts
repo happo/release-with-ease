@@ -28,6 +28,7 @@ export function releaseName(prefix: string, version: string): ReleaseName {
   if (prefix === DEFAULT_TAG_PREFIX) {
     return { tag, label: version, title: tag };
   }
-  const title = prefix.endsWith('@') ? `${prefix.slice(0, -1)} ${version}` : tag;
+  const name = prefix.endsWith('@') ? prefix.slice(0, -1) : '';
+  const title = name ? `${name} ${version}` : tag;
   return { tag, label: tag, title };
 }

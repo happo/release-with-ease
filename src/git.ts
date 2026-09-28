@@ -130,6 +130,8 @@ export interface LastRelease {
  * from far too much history — so in that case the `v` tag for the version
  * package.json is at now stands in for it. Only that exact tag: a nearer `v`
  * tag could just as well belong to another package in the same repository.
+ * And only if HEAD descends from it, since a tag on a branch that never
+ * merged would make `<tag>..HEAD` the whole mainline.
  */
 export function getLastReleaseTag(prefix: string, currentVersion: string | undefined): LastRelease {
   const tag = getLastVersionTag(prefix);
@@ -137,7 +139,9 @@ export function getLastReleaseTag(prefix: string, currentVersion: string | undef
     return { tag, fromDefaultPrefix: false };
   }
   const legacy = `${DEFAULT_TAG_PREFIX}${currentVersion}`;
-  if (tagExists(legacy)) return { tag: legacy, fromDefaultPrefix: true };
+  if (tagExists(legacy) && safeRun(`git merge-base --is-ancestor ${shellQuote(legacy)} HEAD`).ok) {
+    return { tag: legacy, fromDefaultPrefix: true };
+  }
   return { tag: null, fromDefaultPrefix: false };
 }
 
@@ -201,7 +205,7 @@ export function getCommitRange(
   // commit — the same one entry per PR the range above produces.
   if (lastTag) {
     const res = safeRun(
-      `git log --first-parent ${lastTag}..HEAD --pretty=format:%H%x1f%s%x1f%b%x1e${pathspec}`,
+      `git log --first-parent ${shellQuote(`${lastTag}..HEAD`)} --pretty=format:%H%x1f%s%x1f%b%x1e${pathspec}`,
     );
     return res.ok ? res.out : '';
   }

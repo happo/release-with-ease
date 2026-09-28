@@ -1,5 +1,5 @@
 import { safeRun } from './exec.ts';
-import { pathspecSuffix, type Commit } from './git.ts';
+import { pathspecSuffix, shellQuote, type Commit } from './git.ts';
 
 export interface PullRequest {
   number: number;
@@ -197,7 +197,7 @@ export function fetchGitHubMeta(
   const shaToLogin: Record<string, string> = {};
   if (lastTag) {
     const cmpRes = safeRun(
-      `gh api "repos/${owner}/${repo}/compare/${lastTag}...HEAD" --jq '.commits[] | [.sha, (.author.login // "")] | @tsv'`,
+      `gh api ${shellQuote(`repos/${owner}/${repo}/compare/${lastTag}...HEAD`)} --jq '.commits[] | [.sha, (.author.login // "")] | @tsv'`,
     );
     if (cmpRes.ok) {
       for (const line of cmpRes.out.trim().split('\n').filter(Boolean)) {
