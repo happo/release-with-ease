@@ -6,6 +6,9 @@
   "compilerOptions": {
     "noEmit": true,
     "rootDir": ".",
+    // With rootDir ".", tsc --build would put this next to the output, in
+    // dist/, which is what npm publishes. Keep it at the root, as before.
+    "tsBuildInfoFile": "./tsconfig.test.tsbuildinfo",
     "declaration": false,
     "declarationMap": false
   },
