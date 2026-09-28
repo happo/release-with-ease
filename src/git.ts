@@ -84,8 +84,8 @@ export function preflightChecks(): { defaultBranch: string } {
     if (local !== remote) {
       const aheadRes = safeRun(`git rev-list --count origin/${defaultBranch}..HEAD`);
       const behindRes = safeRun(`git rev-list --count HEAD..origin/${defaultBranch}`);
-      const ahead = aheadRes.ok ? parseInt(aheadRes.out.trim(), 10) : 0;
-      const behind = behindRes.ok ? parseInt(behindRes.out.trim(), 10) : 0;
+      const ahead = aheadRes.ok ? Number(aheadRes.out.trim()) : 0;
+      const behind = behindRes.ok ? Number(behindRes.out.trim()) : 0;
       if (behind > 0) {
         throw new Error(
           `Local "${defaultBranch}" is behind origin/${defaultBranch} by ${behind} commit(s). Pull before releasing.`,

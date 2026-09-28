@@ -57,9 +57,12 @@ export function resolvePackageDir(nameOrDir: string, cwd: string = process.cwd()
       `More than one package is named "${nameOrDir}": ${matches.join(', ')}. Pass the directory instead.`,
     );
   }
+  // The names are strings, so the default code-unit order is the one wanted.
+  // eslint-disable-next-line unicorn/require-array-sort-compare
+  const found = [...new Set(names)].toSorted().join(', ');
   throw new UsageError(
     `No package named "${nameOrDir}" in this repository${
-      names.length ? `. Packages found: ${[...new Set(names)].sort().join(', ')}` : ''
+      names.length ? `. Packages found: ${found}` : ''
     }.`,
   );
 }

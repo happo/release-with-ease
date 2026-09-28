@@ -29,13 +29,13 @@ export function encodeRef(ref: string): string {
 export function extractPrNumber(subject: string, body: string): number | null {
   // "(#123)" suffix — squash-merge style
   const m = subject.match(/\(#(\d+)\)\s*$/);
-  if (m?.[1]) return parseInt(m[1], 10);
+  if (m?.[1]) return Number(m[1]);
   // "Merge pull request #123" — merge commit style
   const mm = subject.match(/Merge pull request #(\d+)/);
-  if (mm?.[1]) return parseInt(mm[1], 10);
+  if (mm?.[1]) return Number(mm[1]);
   // Same patterns in body
   const bm = (body || '').match(/\(#(\d+)\)\s*$/m);
-  if (bm?.[1]) return parseInt(bm[1], 10);
+  if (bm?.[1]) return Number(bm[1]);
   return null;
 }
 
@@ -127,7 +127,7 @@ export function orderStack<
   if (prs.length < 2) return { prs: [...prs], verified: false };
 
   const byNumber = (): OrderedStack<T> => ({
-    prs: [...prs].sort((a, b) => a.number - b.number),
+    prs: prs.toSorted((a, b) => a.number - b.number),
     verified: false,
   });
 

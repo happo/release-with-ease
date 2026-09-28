@@ -59,6 +59,16 @@ const config: Config = defineConfig(
     },
   },
 
+  {
+    files: ['src/cli.ts'],
+    rules: {
+      // This is the CLI: process.exit(1) is how it reports an aborted or
+      // failed release to the shell, and it ends the run at once rather than
+      // leaving open handles (readline, child processes) to keep it alive.
+      'unicorn/no-process-exit': 'off',
+    },
+  },
+
   // Last, so it turns off the rules above that would fight Prettier.
   configPrettier,
 );

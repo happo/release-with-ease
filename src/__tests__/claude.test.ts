@@ -372,7 +372,7 @@ describe('askClaudeForRelease', () => {
     });
 
     await assert.rejects(
-      () => askClaudeForRelease([commit()], false, { sleep: async () => {}, maxRetries: 0 }),
+      () => askClaudeForRelease([commit()], false, { sleep: () => Promise.resolve(), maxRetries: 0 }),
       /Failed to determine version bump:.*429/,
     );
   });

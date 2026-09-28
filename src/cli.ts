@@ -156,6 +156,9 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
   const isPublicPackage = pkg.private !== true && pkg.private !== 'true';
   const privateFieldMissing = isPublicPackage && pkg.private === undefined;
   const paths = pathArgs.length ? pathArgs : configuredPaths(pkg);
+  // Validated here, before the fetch below, so that a bad tagPrefix in
+  // package.json fails without touching the remote.
+  // eslint-disable-next-line unicorn/no-declarations-before-early-exit
   const tagPrefix = configuredTagPrefix(pkg);
 
   // The check below for a tag that already exists, and finding the last
@@ -245,7 +248,7 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
   }
 
   console.log(`\n📝 Release notes for ${newVersion}:`);
-  notes.forEach(note => console.log(`  ${note}`));
+  for (const note of notes) console.log(`  ${note}`);
 
   // Create a temporary file with just the changelog entry
   const randomName = `changelog-entry-${crypto.randomBytes(8).toString('hex')}.tmp`;
@@ -294,7 +297,7 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
     );
     if (isPublicPackage) {
       console.log(`  ${step++}. npm whoami (run npm login if not authenticated)`);
-      console.log(`  ${step++}. npm publish`);
+      console.log(`  ${step}. npm publish`);
       if (privateFieldMissing) {
         console.log(
           `\n⚠️  Warning: package.json has no "private" field. The package will be published to npm.\n` +
