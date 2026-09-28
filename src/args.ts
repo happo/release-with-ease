@@ -1,16 +1,24 @@
 import fs from 'node:fs';
 import { safeRun } from './exec.ts';
+import { shellQuote } from './git.ts';
+import { DEFAULT_TAG_PREFIX } from './tags.ts';
 
 export interface PackageJson {
   name?: string;
   version?: string;
   private?: boolean | string;
-  'release-with-ease'?: { paths?: string | Array<string>; path?: string | Array<string> };
+  'release-with-ease'?: {
+    paths?: string | Array<string>;
+    path?: string | Array<string>;
+    tagPrefix?: string;
+  };
 }
 
 export interface ParsedArgs {
   dryRun: boolean;
   paths: Array<string>;
+  /** The package to release, by name or directory, when not the current one. */
+  packageName: string | null;
 }
 
 export class UsageError extends Error {}
@@ -18,6 +26,7 @@ export class UsageError extends Error {}
 export function parseArgs(argv: ReadonlyArray<string>): ParsedArgs {
   const dryRun = argv.includes('--dry-run');
   const paths: Array<string> = [];
+  let packageName: string | null = null;
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -37,10 +46,17 @@ export function parseArgs(argv: ReadonlyArray<string>): ParsedArgs {
         throw new UsageError(`${arg} needs a value, e.g. --path=packages/cli`);
       }
       paths.push(value);
+    } else if (!arg.startsWith('-')) {
+      if (packageName !== null) {
+        throw new UsageError(
+          `Only one package can be released at a time, but both "${packageName}" and "${arg}" were given.`,
+        );
+      }
+      packageName = arg;
     }
   }
 
-  return { dryRun, paths };
+  return { dryRun, paths, packageName };
 }
 
 /**
@@ -65,6 +81,30 @@ export function configuredPaths(pkg: PackageJson): Array<string> {
     );
   }
   return list as Array<string>;
+}
+
+/**
+ * `"release-with-ease": { "tagPrefix": "<name>@" }` in the package.json being
+ * released, or `v` when nothing is configured. The prefix is used both to
+ * find the last release and to name the next one, so it has to make a valid
+ * tag once a version is appended, and cannot hold the glob characters
+ * `git describe --match` would read as a pattern — git's own ref-name rules
+ * already rule those out.
+ */
+export function configuredTagPrefix(pkg: PackageJson): string {
+  const raw = pkg['release-with-ease']?.tagPrefix;
+  if (raw === undefined || raw === null) return DEFAULT_TAG_PREFIX;
+  if (typeof raw !== 'string' || !raw) {
+    throw new UsageError(
+      '"release-with-ease".tagPrefix in package.json must be a non-empty string, e.g. "my-package@".',
+    );
+  }
+  if (!safeRun(`git check-ref-format ${shellQuote(`refs/tags/${raw}1.0.0`)}`).ok) {
+    throw new UsageError(
+      `"release-with-ease".tagPrefix in package.json is "${raw}", which does not make a valid git tag.`,
+    );
+  }
+  return raw;
 }
 
 function realpath(target: string): string | null {

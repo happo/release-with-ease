@@ -3,6 +3,7 @@ import { afterEach, describe, it } from 'vitest';
 
 import {
   configuredPaths,
+  configuredTagPrefix,
   parseArgs,
   UsageError,
   unscopedSubdirectoryWarning,
@@ -12,7 +13,7 @@ import * as tmpfs from '../test-utils/tmpfs.ts';
 
 describe('parseArgs', () => {
   it('defaults to a whole-repository release', () => {
-    assert.deepStrictEqual(parseArgs([]), { dryRun: false, paths: [] });
+    assert.deepStrictEqual(parseArgs([]), { dryRun: false, paths: [], packageName: null });
   });
 
   it('recognizes --dry-run', () => {
@@ -43,10 +44,12 @@ describe('parseArgs', () => {
     assert.deepStrictEqual(parseArgs(['--dry-run', '--path', 'a']), {
       dryRun: true,
       paths: ['a'],
+      packageName: null,
     });
     assert.deepStrictEqual(parseArgs(['--path', 'a', '--dry-run']), {
       dryRun: true,
       paths: ['a'],
+      packageName: null,
     });
   });
 
@@ -68,6 +71,70 @@ describe('parseArgs', () => {
       './packages/cli',
     ]);
   });
+
+  it('takes the package to release as a positional argument', () => {
+    assert.deepStrictEqual(parseArgs(['server', '--dry-run']), {
+      dryRun: true,
+      paths: [],
+      packageName: 'server',
+    });
+  });
+
+  it('does not mistake a --path value for the package', () => {
+    const args = parseArgs(['--path', 'packages/cli', 'cli']);
+    assert.deepStrictEqual(args.paths, ['packages/cli']);
+    assert.strictEqual(args.packageName, 'cli');
+  });
+
+  it('refuses two packages at once', () => {
+    assert.throws(() => parseArgs(['server', 'worker']), /Only one package/);
+  });
+});
+
+describe('configuredTagPrefix', () => {
+  it('is v when nothing is configured', () => {
+    assert.strictEqual(configuredTagPrefix({}), 'v');
+    assert.strictEqual(configuredTagPrefix({ 'release-with-ease': { paths: ['.'] } }), 'v');
+  });
+
+  it('reads a configured prefix', () => {
+    assert.strictEqual(
+      configuredTagPrefix({ 'release-with-ease': { tagPrefix: 'server@' } }),
+      'server@',
+    );
+  });
+
+  it('accepts a scoped package name', () => {
+    assert.strictEqual(
+      configuredTagPrefix({ 'release-with-ease': { tagPrefix: '@happo/cli@' } }),
+      '@happo/cli@',
+    );
+  });
+
+  it('refuses an empty prefix', () => {
+    assert.throws(
+      () => configuredTagPrefix({ 'release-with-ease': { tagPrefix: '' } }),
+      UsageError,
+    );
+  });
+
+  it('refuses a prefix that is not a string', () => {
+    assert.throws(
+      () => configuredTagPrefix({ 'release-with-ease': { tagPrefix: true } } as never),
+      UsageError,
+    );
+  });
+
+  // Each of these either makes an invalid ref or would be read as a pattern
+  // by `git describe --match`.
+  for (const prefix of ['server:', 'my server@', 'server*', 'server?', 'server[', 'a..b@', '@{']) {
+    it(`refuses ${JSON.stringify(prefix)}`, () => {
+      assert.throws(
+        () => configuredTagPrefix({ 'release-with-ease': { tagPrefix: prefix } }),
+        /does not make a valid git tag/,
+      );
+    });
+  }
 });
 
 describe('configuredPaths', () => {
