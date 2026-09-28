@@ -9,6 +9,7 @@
   "scripts": {
     "build": "tsc --build",
     "clean": "rm -rf dist *.tsbuildinfo",
+    "lint": "eslint .",
     "tsc": "tsc --build tsconfig.test.json",
     "test": "vitest run",
     "prepublishOnly": "npm run clean && npm run build",
@@ -42,8 +43,16 @@
     "node": ">=20"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^26.5.1",
+    "eslint": "^10.11.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-depend": "^1.5.0",
+    "eslint-plugin-simple-import-sort": "^14.0.0",
+    "eslint-plugin-unicorn": "^74.0.0",
+    "jiti": "^2.7.0",
     "typescript": "^6.0.3",
+    "typescript-eslint": "^8.70.1",
     "vitest": "^5.0.2"
   }
 }
