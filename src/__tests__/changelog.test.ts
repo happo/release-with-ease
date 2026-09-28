@@ -13,16 +13,32 @@ describe('insertChangelogEntry', () => {
 
     assert.strictEqual(
       result,
-      ['# Changelog', '', '## 1.1.0', '', '- Add a thing', '', '## 1.0.0', '', '- First release', ''].join('\n'),
+      [
+        '# Changelog',
+        '',
+        '## 1.1.0',
+        '',
+        '- Add a thing',
+        '',
+        '## 1.0.0',
+        '',
+        '- First release',
+        '',
+      ].join('\n'),
     );
   });
 
   it('keeps everything above the Changelog heading intact', () => {
-    const readme = ['# my-package', '', 'Docs go here.', '', '# Changelog', '', '## 1.0.0'].join('\n');
+    const readme = ['# my-package', '', 'Docs go here.', '', '# Changelog', '', '## 1.0.0'].join(
+      '\n',
+    );
 
     const result = insertChangelogEntry(readme, ['## 1.1.0']);
 
-    assert.match(result, /^# my-package\n\nDocs go here\.\n\n# Changelog\n\n## 1\.1\.0\n\n## 1\.0\.0$/);
+    assert.match(
+      result,
+      /^# my-package\n\nDocs go here\.\n\n# Changelog\n\n## 1\.1\.0\n\n## 1\.0\.0$/,
+    );
   });
 
   it('handles a Changelog section with no entries yet', () => {

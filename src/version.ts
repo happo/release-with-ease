@@ -11,7 +11,7 @@ export function bumpVersionString(cur: string, bump: Bump): string {
   // as `3-beta` in `1.2.3-beta.1`, where Number would give NaN and reject the
   // version.
   // eslint-disable-next-line unicorn/prefer-number-coercion
-  const [maj, min, pat] = cur.split('.').map(n => parseInt(n, 10));
+  const [maj, min, pat] = cur.split('.').map((n) => parseInt(n, 10));
   if (
     maj === undefined ||
     min === undefined ||

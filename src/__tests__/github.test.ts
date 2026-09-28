@@ -30,7 +30,7 @@ function pr(overrides: Partial<PullRequest> & { number: number }): PullRequest {
   };
 }
 
-const numbers = (prs: ReadonlyArray<{ number: number }>) => prs.map(p => p.number);
+const numbers = (prs: ReadonlyArray<{ number: number }>) => prs.map((p) => p.number);
 
 describe('extractPrNumber', () => {
   it('reads a squash-merge subject', () => {
@@ -167,10 +167,7 @@ describe('against a real merged stack', () => {
     it('rejects a pull request with no known head commit', () => {
       const { stack } = buildStack();
       assert.ok(
-        !isVerifiedChain(
-          [{ headRefOid: stack.bottomHeadSha }, { headRefOid: '' }],
-          stack.mergeSha,
-        ),
+        !isVerifiedChain([{ headRefOid: stack.bottomHeadSha }, { headRefOid: '' }], stack.mergeSha),
       );
     });
 
@@ -195,10 +192,7 @@ describe('against a real merged stack', () => {
       repo.git('merge', '--no-ff', 'two', '-m', 'Merge two');
 
       assert.ok(
-        !isVerifiedChain(
-          [{ headRefOid: oneHead }, { headRefOid: twoHead }],
-          repo.sha('HEAD'),
-        ),
+        !isVerifiedChain([{ headRefOid: oneHead }, { headRefOid: twoHead }], repo.sha('HEAD')),
       );
     });
 
@@ -232,7 +226,7 @@ describe('against a real merged stack', () => {
       // The names spell out main -> allowlist -> webrtc, but the commit the
       // bottom one points at is not in this merge at all.
       const { stack } = buildStack();
-      const lying = stackPrs(stack).map(p =>
+      const lying = stackPrs(stack).map((p) =>
         p.number === 1 ? { ...p, headRefOid: '0'.repeat(40) } : p,
       );
       const ordered = orderStack(lying, stack.mergeSha);
@@ -243,7 +237,7 @@ describe('against a real merged stack', () => {
 
     it('falls back to PR number, unverified, for unrelated pull requests', () => {
       const { stack } = buildStack();
-      const unrelated = stackPrs(stack).map(p => ({ ...p, baseRefName: 'main' }));
+      const unrelated = stackPrs(stack).map((p) => ({ ...p, baseRefName: 'main' }));
       const ordered = orderStack(unrelated, stack.mergeSha);
 
       assert.strictEqual(ordered.verified, false);
@@ -304,17 +298,13 @@ describe('against a real merged stack', () => {
 
     it('leaves a stack whole when a head commit cannot be placed', () => {
       const { stack } = buildStack();
-      const lying = stackPrs(stack).map(p =>
+      const lying = stackPrs(stack).map((p) =>
         p.number === 1 ? { ...p, headRefOid: '0'.repeat(40) } : p,
       );
 
       assert.deepStrictEqual(
         numbers(
-          filterStackByPaths(
-            orderStack(lying, stack.mergeSha),
-            stack.mergeSha,
-            ['src/webrtc.js'],
-          ),
+          filterStackByPaths(orderStack(lying, stack.mergeSha), stack.mergeSha, ['src/webrtc.js']),
         ),
         [1, 2],
       );
@@ -360,15 +350,18 @@ describe('against a real merged stack', () => {
       const result = analyze();
 
       assert.deepStrictEqual(
-        result.map(c => c.prNumber),
+        result.map((c) => c.prNumber),
         [1, 2],
       );
-      assert.deepStrictEqual(result.map(c => c.subject), [
-        'Let targets restrict which hostnames the browser may reach',
-        'Stop WebRTC talking to the network',
-      ]);
+      assert.deepStrictEqual(
+        result.map((c) => c.subject),
+        [
+          'Let targets restrict which hostnames the browser may reach',
+          'Stop WebRTC talking to the network',
+        ],
+      );
       // Both entries come from the one mainline commit the stack landed as.
-      assert.deepStrictEqual(new Set(result.map(c => c.hash)), new Set([stack.mergeSha]));
+      assert.deepStrictEqual(new Set(result.map((c) => c.hash)), new Set([stack.mergeSha]));
     });
 
     it('attributes each entry to its own pull request author', () => {
@@ -378,7 +371,7 @@ describe('against a real merged stack', () => {
       fakeGh.install({ nameWithOwner: 'happo/test', prList: prs });
 
       assert.deepStrictEqual(
-        analyze().map(c => c.githubLogin),
+        analyze().map((c) => c.githubLogin),
         ['trotzig', 'lencioni'],
       );
     });
@@ -388,15 +381,15 @@ describe('against a real merged stack', () => {
       fakeGh.install({ nameWithOwner: 'happo/test', prList: stackPrs(stack) });
 
       assert.deepStrictEqual(
-        analyze(['src/allowlist.js']).map(c => c.prNumber),
+        analyze(['src/allowlist.js']).map((c) => c.prNumber),
         [1],
       );
       assert.deepStrictEqual(
-        analyze(['src/webrtc.js']).map(c => c.prNumber),
+        analyze(['src/webrtc.js']).map((c) => c.prNumber),
         [2],
       );
       assert.deepStrictEqual(
-        analyze(['src/shared.js']).map(c => c.prNumber),
+        analyze(['src/shared.js']).map((c) => c.prNumber),
         [1, 2],
       );
     });

@@ -5,8 +5,8 @@ export function prompt(question: string): Promise<string> {
     input: process.stdin,
     output: process.stdout,
   });
-  return new Promise(resolve => {
-    rl.question(question, ans => {
+  return new Promise((resolve) => {
+    rl.question(question, (ans) => {
       rl.close();
       resolve(ans);
     });

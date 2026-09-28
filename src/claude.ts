@@ -1,5 +1,5 @@
 import type { CommitWithMeta } from './github.ts';
-import { type Bump,isBump } from './version.ts';
+import { type Bump, isBump } from './version.ts';
 
 export interface OmittedChange {
   commit: CommitWithMeta;
@@ -66,7 +66,7 @@ export function buildUserContent(commits: ReadonlyArray<CommitWithMeta>): string
     .map((c, i) => {
       const body = c.body ? c.body.trim() : '';
       const truncatedBody =
-        body.length > MAX_BODY_LENGTH ? `${body.slice(0, MAX_BODY_LENGTH)  }…` : body;
+        body.length > MAX_BODY_LENGTH ? `${body.slice(0, MAX_BODY_LENGTH)}…` : body;
       const meta: Array<string> = [];
       if (c.githubLogin) meta.push(`by @${c.githubLogin}`);
       if (c.prNumber) meta.push(`in #${c.prNumber}`);
@@ -133,7 +133,7 @@ export function parseReleaseSuggestion(
   }
 
   const covered = new Set<number>();
-  const notes = (parsed.notes as Array<unknown>).map(note => {
+  const notes = (parsed.notes as Array<unknown>).map((note) => {
     if (typeof note === 'string') return `- ${note}`;
     const { text, changes } = (note ?? {}) as RawNote;
     if (typeof text !== 'string') {
@@ -204,7 +204,11 @@ function parseRetryAfterMs(header: string | null): number | null {
  * Retry-After takes priority over the computed delay when present, since it
  * reflects the server's own view of when capacity will free up.
  */
-function backoffDelayMs(attempt: number, retryAfterMs: number | null, opts: Required<RetryOptions>): number {
+function backoffDelayMs(
+  attempt: number,
+  retryAfterMs: number | null,
+  opts: Required<RetryOptions>,
+): number {
   if (retryAfterMs !== null) return Math.min(retryAfterMs, opts.maxDelayMs);
   const exp = opts.baseDelayMs * 2 ** attempt;
   const jitter = Math.random() * opts.baseDelayMs;
@@ -220,7 +224,7 @@ async function fetchWithRetry(
     maxRetries: Math.max(0, options.maxRetries ?? DEFAULT_MAX_RETRIES),
     baseDelayMs: Math.max(0, options.baseDelayMs ?? DEFAULT_BASE_DELAY_MS),
     maxDelayMs: Math.max(0, options.maxDelayMs ?? DEFAULT_MAX_DELAY_MS),
-    sleep: options.sleep ?? (ms => new Promise(resolve => setTimeout(resolve, ms))),
+    sleep: options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms))),
   };
 
   let lastError: unknown;
@@ -292,9 +296,7 @@ export async function askClaudeForRelease(
   );
   if (!res.ok) {
     console.error(await res.text());
-    throw new Error(
-      `Failed to determine version bump: ${res.statusText} ${res.status}`,
-    );
+    throw new Error(`Failed to determine version bump: ${res.statusText} ${res.status}`);
   }
   const data = (await res.json()) as {
     stop_reason?: string;
@@ -306,6 +308,6 @@ export async function askClaudeForRelease(
     throw new Error(`Claude did not finish the release notes (stop reason: ${data.stop_reason})`);
   }
   // The answer follows a thinking block, so it is not the first one.
-  const text = data.content?.find(block => block.type === 'text')?.text;
+  const text = data.content?.find((block) => block.type === 'text')?.text;
   return parseReleaseSuggestion(text || '', commits);
 }

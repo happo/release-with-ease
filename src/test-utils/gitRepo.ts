@@ -65,7 +65,7 @@ export function initRepo(): Repo {
 
   const repo: Repo = {
     git: (...args) => git(args),
-    sha: rev => git(['rev-parse', rev]).trim(),
+    sha: (rev) => git(['rev-parse', rev]).trim(),
     commit: (files, message) => {
       for (const [name, content] of Object.entries(files)) {
         tmpfs.writeFile(path.join(WORK, name), content);
@@ -120,13 +120,7 @@ export function mergeTwoDeepStack(
   const topHeadSha = repo.commit(options.topFiles, 'Top of the stack');
 
   repo.git('checkout', 'main');
-  repo.git(
-    'merge',
-    '--no-ff',
-    topBranch,
-    '-m',
-    options.mergeMessage ?? `Top of the stack (#2)`,
-  );
+  repo.git('merge', '--no-ff', topBranch, '-m', options.mergeMessage ?? `Top of the stack (#2)`);
   const mergeSha = repo.sha('HEAD');
   repo.publish();
 

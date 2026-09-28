@@ -70,7 +70,7 @@ function workspaceLockfile(dir: string): { file: string; key: string } | null {
  * `preversion`/`version`/`postversion` scripts are therefore not run.
  */
 export function writeVersion(dir: string, version: string): Array<string> {
-  rewriteJson(path.join(dir, 'package.json'), data => {
+  rewriteJson(path.join(dir, 'package.json'), (data) => {
     data['version'] = version;
   });
   const changed = ['package.json'];
@@ -78,12 +78,10 @@ export function writeVersion(dir: string, version: string): Array<string> {
   for (const lockfile of LOCKFILES) {
     const file = path.join(dir, lockfile);
     if (!fs.existsSync(file)) continue;
-    rewriteJson(file, data => {
+    rewriteJson(file, (data) => {
       data['version'] = version;
       // lockfileVersion 2 and 3 repeat the root package's version here.
-      const root = (data['packages'] as Record<string, Record<string, unknown>> | undefined)?.[
-        ''
-      ];
+      const root = (data['packages'] as Record<string, Record<string, unknown>> | undefined)?.[''];
       if (root) root['version'] = version;
     });
     changed.push(lockfile);
@@ -92,10 +90,8 @@ export function writeVersion(dir: string, version: string): Array<string> {
   if (changed.length === 1) {
     const workspace = workspaceLockfile(dir);
     if (workspace) {
-      rewriteJson(workspace.file, data => {
-        const entry = (data['packages'] as Record<string, Record<string, unknown>>)[
-          workspace.key
-        ];
+      rewriteJson(workspace.file, (data) => {
+        const entry = (data['packages'] as Record<string, Record<string, unknown>>)[workspace.key];
         if (entry) entry['version'] = version;
       });
       changed.push(path.relative(dir, workspace.file));

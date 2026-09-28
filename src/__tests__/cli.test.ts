@@ -103,7 +103,7 @@ describe('stripEditorComments', () => {
     const lines = buildEditorContent('## 1.2.0\n\n- Add a thing\n', omitted).split('\n');
     // Turn the last omitted change into a bullet point in place, the way
     // someone would in the editor.
-    const idx = lines.findIndex(line => line.includes('Retry stalled uploads'));
+    const idx = lines.findIndex((line) => line.includes('Retry stalled uploads'));
     lines[idx] = '- Retry stalled uploads';
     assert.strictEqual(
       stripEditorComments(lines.join('\n')),
@@ -114,7 +114,7 @@ describe('stripEditorComments', () => {
   it('drops the remaining comments when some of them were deleted', () => {
     const content = buildEditorContent('## 1.2.0\n\n- Add a thing\n', omitted)
       .split('\n')
-      .filter(line => !line.includes('are discarded when the editor closes'))
+      .filter((line) => !line.includes('are discarded when the editor closes'))
       .join('\n');
     assert.strictEqual(stripEditorComments(content), '## 1.2.0\n\n- Add a thing');
   });

@@ -77,10 +77,7 @@ describe('resolvePackageDir', () => {
   it('ignores package.json files git does not track', () => {
     tmpfs.mock({});
     monorepo();
-    tmpfs.writeFile(
-      'work/node_modules/stray/package.json',
-      JSON.stringify({ name: 'stray' }),
-    );
+    tmpfs.writeFile('work/node_modules/stray/package.json', JSON.stringify({ name: 'stray' }));
     assert.throws(() => resolvePackageDir('stray'), /No package named "stray"/);
   });
 

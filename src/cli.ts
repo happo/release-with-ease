@@ -50,12 +50,12 @@ import {
   shellQuote,
   tagExists,
 } from './git.ts';
-import { type CommitWithMeta,fetchGitHubMeta } from './github.ts';
+import { type CommitWithMeta, fetchGitHubMeta } from './github.ts';
 import { fetchNpmOtp } from './npm.ts';
 import { writeVersion } from './packageJson.ts';
 import { prompt } from './prompt.ts';
 import { releaseName } from './tags.ts';
-import { type Bump,bumpVersionString, isBump } from './version.ts';
+import { type Bump, bumpVersionString, isBump } from './version.ts';
 import { resolvePackageDir } from './workspace.ts';
 
 /**
@@ -90,10 +90,7 @@ function editorComment(text: string): string {
  * leave the rest behind in the release notes, and turning one into a bullet
  * point is a matter of editing that line.
  */
-export function buildEditorContent(
-  entry: string,
-  omitted: ReadonlyArray<OmittedChange>,
-): string {
+export function buildEditorContent(entry: string, omitted: ReadonlyArray<OmittedChange>): string {
   const context = omitted.length
     ? [
         'Not covered by any bullet point above; add any that users should hear about:',
@@ -121,7 +118,7 @@ export function buildEditorContent(
 export function stripEditorComments(content: string): string {
   return content
     .split('\n')
-    .filter(line => !line.startsWith(EDITOR_COMMENT_PREFIX))
+    .filter((line) => !line.startsWith(EDITOR_COMMENT_PREFIX))
     .join('\n')
     .trim();
 }
@@ -180,7 +177,7 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
   if (warning) console.log(warning);
 
   const raw = getCommitRange(lastVersionTag, paths);
-  let commits: Array<CommitWithMeta> = parseCommits(raw).map(c => ({
+  let commits: Array<CommitWithMeta> = parseCommits(raw).map((c) => ({
     ...c,
     githubLogin: null,
     prNumber: null,
@@ -266,9 +263,7 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
   try {
     run(editorCmd, { stdio: 'inherit' });
   } catch {
-    console.error(
-      '❌ Failed to open editor. Please set EDITOR or VISUAL environment variable.',
-    );
+    console.error('❌ Failed to open editor. Please set EDITOR or VISUAL environment variable.');
     fs.unlinkSync(tempEntryPath);
     process.exit(1);
   }
@@ -289,7 +284,9 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
       console.log(`  ${step++}. git add README.md`);
       console.log(`  ${step++}. git commit -m "Update changelog for ${release.label}"`);
     }
-    console.log(`  ${step++}. Set "version": "${newVersion}" in package.json (and any npm lockfile)`);
+    console.log(
+      `  ${step++}. Set "version": "${newVersion}" in package.json (and any npm lockfile)`,
+    );
     console.log(`  ${step++}. git commit -m "${release.label}" + tag ${release.tag}`);
     console.log(`  ${step++}. git push origin ${defaultBranch} refs/tags/${release.tag}`);
     console.log(
@@ -350,9 +347,7 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
       );
       const answer = (await prompt('   Confirm publish? [y/N] ')).trim().toLowerCase();
       if (answer !== 'y' && answer !== 'yes') {
-        console.log(
-          'Aborted. Set "private": false in package.json to suppress this prompt.',
-        );
+        console.log('Aborted. Set "private": false in package.json to suppress this prompt.');
         process.exit(1);
       }
     }

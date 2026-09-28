@@ -35,10 +35,11 @@ describe('parseArgs', () => {
   });
 
   it('collects repeated paths in order', () => {
-    assert.deepStrictEqual(
-      parseArgs(['--path', 'a', '--path=b', '--pathspec', 'c']).paths,
-      ['a', 'b', 'c'],
-    );
+    assert.deepStrictEqual(parseArgs(['--path', 'a', '--path=b', '--pathspec', 'c']).paths, [
+      'a',
+      'b',
+      'c',
+    ]);
   });
 
   it('combines a path with --dry-run in either order', () => {
@@ -68,9 +69,7 @@ describe('parseArgs', () => {
   });
 
   it('does not treat a path that looks like a value as a flag', () => {
-    assert.deepStrictEqual(parseArgs(['--path', './packages/cli']).paths, [
-      './packages/cli',
-    ]);
+    assert.deepStrictEqual(parseArgs(['--path', './packages/cli']).paths, ['./packages/cli']);
   });
 
   it('takes the package to release as a positional argument', () => {
@@ -128,7 +127,16 @@ describe('configuredTagPrefix', () => {
 
   // Each of these makes an invalid ref, would be read as a pattern by
   // `git describe --match`, or (a leading dash) as an option by `git tag`.
-  for (const prefix of ['server:', 'my server@', 'server*', 'server?', 'server[', 'a..b@', '@{', '-rc@']) {
+  for (const prefix of [
+    'server:',
+    'my server@',
+    'server*',
+    'server?',
+    'server[',
+    'a..b@',
+    '@{',
+    '-rc@',
+  ]) {
     it(`refuses ${JSON.stringify(prefix)}`, () => {
       assert.throws(
         () => configuredTagPrefix({ 'release-with-ease': { tagPrefix: prefix } }),
@@ -149,10 +157,10 @@ describe('configuredPaths', () => {
   });
 
   it('accepts an array', () => {
-    assert.deepStrictEqual(
-      configuredPaths({ 'release-with-ease': { paths: ['a', 'b'] } }),
-      ['a', 'b'],
-    );
+    assert.deepStrictEqual(configuredPaths({ 'release-with-ease': { paths: ['a', 'b'] } }), [
+      'a',
+      'b',
+    ]);
   });
 
   it('accepts the singular "path" key', () => {
@@ -160,16 +168,13 @@ describe('configuredPaths', () => {
   });
 
   it('prefers "paths" when both are given', () => {
-    assert.deepStrictEqual(
-      configuredPaths({ 'release-with-ease': { paths: 'a', path: 'b' } }),
-      ['a'],
-    );
+    assert.deepStrictEqual(configuredPaths({ 'release-with-ease': { paths: 'a', path: 'b' } }), [
+      'a',
+    ]);
   });
 
   it('trims surrounding whitespace', () => {
-    assert.deepStrictEqual(configuredPaths({ 'release-with-ease': { paths: '  a  ' } }), [
-      'a',
-    ]);
+    assert.deepStrictEqual(configuredPaths({ 'release-with-ease': { paths: '  a  ' } }), ['a']);
   });
 
   it('refuses an empty array', () => {
@@ -180,7 +185,10 @@ describe('configuredPaths', () => {
   });
 
   it('refuses a blank entry rather than releasing everything', () => {
-    assert.throws(() => configuredPaths({ 'release-with-ease': { paths: ['a', '  '] } }), UsageError);
+    assert.throws(
+      () => configuredPaths({ 'release-with-ease': { paths: ['a', '  '] } }),
+      UsageError,
+    );
   });
 
   it('refuses a non-string entry', () => {

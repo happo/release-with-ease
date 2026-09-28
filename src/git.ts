@@ -172,7 +172,7 @@ export function pushRelease(branch: string, release: ReleaseName): void {
  * before git ever saw it — has to be quoted.
  */
 export function shellQuote(value: string): string {
-  return `'${value.replaceAll('\'', String.raw`'\''`)}'`;
+  return `'${value.replaceAll("'", String.raw`'\''`)}'`;
 }
 
 /**
@@ -186,10 +186,7 @@ export function pathspecSuffix(paths: ReadonlyArray<string>): string {
   return ` -- ${paths.map(shellQuote).join(' ')}`;
 }
 
-export function getCommitRange(
-  lastTag: string | null,
-  paths: ReadonlyArray<string> = [],
-): string {
+export function getCommitRange(lastTag: string | null, paths: ReadonlyArray<string> = []): string {
   const pathspec = pathspecSuffix(paths);
   // --first-parent walks only the mainline of history: for a PR merged via
   // a merge commit, that means the merge commit itself shows up but the
@@ -220,9 +217,9 @@ export function parseCommits(raw: string): Array<Commit> {
   if (!raw) return [];
   return raw
     .split('\u{1E}')
-    .map(chunk => chunk.trim())
+    .map((chunk) => chunk.trim())
     .filter(Boolean)
-    .map(chunk => {
+    .map((chunk) => {
       const [hash, subject, body] = chunk.split('\u{1F}', 3);
       return { hash: hash ?? '', subject: subject || '', body: body || '' };
     });

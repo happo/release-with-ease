@@ -21,7 +21,7 @@ import { releaseName } from '../tags.ts';
 import { initRepo, mergeTwoDeepStack } from '../test-utils/gitRepo.ts';
 import * as tmpfs from '../test-utils/tmpfs.ts';
 
-const subjects = (raw: string) => parseCommits(raw).map(c => c.subject);
+const subjects = (raw: string) => parseCommits(raw).map((c) => c.subject);
 
 describe('shellQuote', () => {
   it('wraps a plain path', () => {
