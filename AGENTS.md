@@ -12,7 +12,7 @@ A CLI (`npx release-with-ease`) that bumps an npm package's version, asks Claude
 
 ## Commands
 
-Run everything through mise (bare `pnpm` is not on `PATH`):
+Run everything through `mise exec --`. Agent shells usually don't have mise activated, so bare `pnpm` may not be on `PATH` (the README's bare commands assume an activated shell):
 
 ```sh
 mise exec -- pnpm install

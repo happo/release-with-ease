@@ -165,7 +165,7 @@ If no OTP source is available, npm's native OTP prompt appears at publish time a
 
 The source is TypeScript under `src/`, compiled to `dist/` by `tsc`. The published `bin/release-with-ease.js` is a shim over the compiled output, so what `npx` runs is ordinary JavaScript and the `engines` floor holds.
 
-Node and pnpm versions are pinned in `mise.toml`, so [mise](https://mise.jdx.dev/) will put the right ones on your path:
+Node and pnpm versions are pinned in `mise.toml`, so [mise](https://mise.jdx.dev/) will put the right ones on your path once it is [activated in your shell](https://mise.jdx.dev/getting-started.html#activate-mise). Without activation, prefix each command with `mise exec --` (for example `mise exec -- pnpm test`):
 
 ```sh
 mise install
