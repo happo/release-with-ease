@@ -62,19 +62,19 @@ export function formatCommitLine(commit: CommitWithMeta): string {
   return `  ${shortSha} ${commit.subject}${pr}`;
 }
 
-/**
- * Opens the block of editor-only context. Everything from this line to the end
- * of the file is thrown away when the editor closes. It is an HTML comment so
- * the context reads as one in the editor; `stripEditorComment` refuses an
- * entry that lost this line but kept the rest of the block.
- */
-export const EDITOR_COMMENT_MARKER =
-  '<!-- release-with-ease: everything from this line down is discarded.';
+/** One line of editor-only context: an HTML comment that is a line of its own. */
+function editorComment(text: string): string {
+  return `<!-- ${text} -->`;
+}
+
+const EDITOR_COMMENT_LINE = /^<!--.*-->$/;
 
 /**
  * What the editor opens with: the entry to publish, then the changes no
  * bullet point covers, so a change left out is a line to read rather than
- * something to notice missing.
+ * something to notice missing. Each line of that context is a comment of its
+ * own and is dropped on its own, so deleting or moving some of them can't
+ * leave the rest behind in the release notes.
  */
 export function buildEditorContent(
   entry: string,
@@ -82,38 +82,33 @@ export function buildEditorContent(
 ): string {
   const context = omitted.length
     ? [
-        'These changes are not covered by any bullet point above. Add any that',
-        'users should hear about:',
-        '',
-        ...omitted.flatMap(({ commit, reason }) => [
-          formatCommitLine(commit),
-          `      ${reason ?? '(no reason given)'}`,
-        ]),
+        'Not covered by any bullet point above; add any that users should hear about:',
+        ...omitted.map(
+          ({ commit, reason }) => `${formatCommitLine(commit)}: ${reason ?? '(no reason given)'}`,
+        ),
       ]
     : ['Every change in this release is covered by a bullet point above.'];
-  return [entry.trimEnd(), '', EDITOR_COMMENT_MARKER, '', ...context, '-->', ''].join('\n');
+  return [
+    entry.trimEnd(),
+    '',
+    editorComment('Lines like this one are discarded when the editor closes.'),
+    ...context.map(editorComment),
+    '',
+  ].join('\n');
 }
 
 /**
- * The entry as edited, without the editor-only context.
- *
- * Without the marker there is no telling where the entry ends and the context
- * begins, and a leftover `-->` means the context is still there — publishing
- * it would put the list of omitted changes into the release notes.
+ * The entry as edited, without the editor-only context: every line that is a
+ * whole HTML comment on its own. That takes a one-line comment someone wrote
+ * themselves along with it, which is no loss, since a comment never shows up
+ * in the rendered notes anyway.
  */
-export function stripEditorComment(content: string): string {
-  const idx = content.indexOf(EDITOR_COMMENT_MARKER);
-  if (idx !== -1) return content.slice(0, idx).trim();
-
-  const lines = content.split('\n').map(line => line.trim());
-  const closeIdx = lines.indexOf('-->');
-  const openIdx = lines.findIndex(line => line.startsWith('<!--'));
-  if (closeIdx !== -1 && (openIdx === -1 || openIdx > closeIdx)) {
-    throw new Error(
-      `The line starting "${EDITOR_COMMENT_MARKER.slice(0, 24)}…" was removed, so the notes can't be told apart from the list of omitted changes below them. Delete that list, down to and including "-->", and run the release again.`,
-    );
-  }
-  return content.trim();
+export function stripEditorComments(content: string): string {
+  return content
+    .split('\n')
+    .filter(line => !EDITOR_COMMENT_LINE.test(line.trim()))
+    .join('\n')
+    .trim();
 }
 
 export async function main(argv: ReadonlyArray<string>): Promise<void> {
@@ -267,13 +262,7 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
   }
 
   // Read the edited entry
-  let editedEntry: string;
-  try {
-    editedEntry = stripEditorComment(fs.readFileSync(tempEntryPath, 'utf8'));
-  } catch (err) {
-    // Nothing has been committed yet, but the edits are only in the temp file.
-    throw new Error(`${(err as Error).message} Your edits are in ${tempEntryPath}.`);
-  }
+  const editedEntry = stripEditorComments(fs.readFileSync(tempEntryPath, 'utf8'));
 
   if (useReadmeChangelog) {
     // Insert changelog entry into README.md

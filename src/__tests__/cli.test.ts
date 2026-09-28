@@ -1,12 +1,7 @@
 import assert from 'node:assert';
 import { describe, it } from 'node:test';
 
-import {
-  buildEditorContent,
-  EDITOR_COMMENT_MARKER,
-  formatCommitLine,
-  stripEditorComment,
-} from '../cli.ts';
+import { buildEditorContent, formatCommitLine, stripEditorComments } from '../cli.ts';
 import type { CommitWithMeta } from '../github.ts';
 
 function commit(overrides: Partial<CommitWithMeta> = {}): CommitWithMeta {
@@ -63,7 +58,7 @@ describe('formatCommitLine', () => {
 describe('buildEditorContent', () => {
   const entry = '## 1.2.0\n\n- Add a thing\n';
 
-  it('lists each omitted change with its reason below the entry', () => {
+  it('lists each omitted change with its reason, one comment per line', () => {
     const content = buildEditorContent(entry, [
       { commit: commit({ subject: 'Bump CI action', prNumber: 7 }), reason: 'CI only' },
       { commit: commit({ subject: 'Retry stalled uploads', prNumber: 8 }), reason: null },
@@ -75,59 +70,65 @@ describe('buildEditorContent', () => {
         '',
         '- Add a thing',
         '',
-        EDITOR_COMMENT_MARKER,
-        '',
-        'These changes are not covered by any bullet point above. Add any that',
-        'users should hear about:',
-        '',
-        '  0e3c3fb Bump CI action (#7)',
-        '      CI only',
-        '  0e3c3fb Retry stalled uploads (#8)',
-        '      (no reason given)',
-        '-->',
+        '<!-- Lines like this one are discarded when the editor closes. -->',
+        '<!-- Not covered by any bullet point above; add any that users should hear about: -->',
+        '<!--   0e3c3fb Bump CI action (#7): CI only -->',
+        '<!--   0e3c3fb Retry stalled uploads (#8): (no reason given) -->',
         '',
       ].join('\n'),
     );
   });
 
   it('says so when every change is covered', () => {
-    assert.match(buildEditorContent(entry, []), /Every change in this release is covered/);
+    assert.match(
+      buildEditorContent(entry, []),
+      /^<!-- Every change in this release is covered by a bullet point above\. -->$/m,
+    );
   });
 });
 
-describe('stripEditorComment', () => {
+describe('stripEditorComments', () => {
+  const omitted = [
+    { commit: commit({ subject: 'Bump CI action', prNumber: 7 }), reason: 'CI only' },
+    { commit: commit({ subject: 'Retry stalled uploads', prNumber: 8 }), reason: null },
+  ];
+
   it('round-trips to just the entry', () => {
-    const content = buildEditorContent('## 1.2.0\n\n- Add a thing\n', [
-      { commit: commit(), reason: 'internal' },
-    ]);
-    assert.strictEqual(stripEditorComment(content), '## 1.2.0\n\n- Add a thing');
+    const content = buildEditorContent('## 1.2.0\n\n- Add a thing\n', omitted);
+    assert.strictEqual(stripEditorComments(content), '## 1.2.0\n\n- Add a thing');
   });
 
-  it('keeps edits made above the marker', () => {
-    const content = buildEditorContent('## 1.2.0\n\n- Add a thing\n', [
-      { commit: commit(), reason: 'internal' },
-    ]).replace('- Add a thing', '- Add a thing\n- Retry stalled uploads');
+  it('keeps a change promoted into the notes and drops the comments around it', () => {
+    const lines = buildEditorContent('## 1.2.0\n\n- Add a thing\n', omitted).split('\n');
+    // Turn the last omitted change into a bullet point in place, the way
+    // someone would in the editor.
+    const idx = lines.findIndex(line => line.includes('Retry stalled uploads'));
+    lines[idx] = '- Retry stalled uploads';
     assert.strictEqual(
-      stripEditorComment(content),
-      '## 1.2.0\n\n- Add a thing\n- Retry stalled uploads',
+      stripEditorComments(lines.join('\n')),
+      '## 1.2.0\n\n- Add a thing\n\n- Retry stalled uploads',
     );
   });
 
-  it('refuses to guess when the marker was deleted but the rest of the context was not', () => {
-    const content = buildEditorContent('## 1.2.0\n\n- Add a thing\n', [
-      { commit: commit(), reason: 'internal' },
-    ]).replace(`${EDITOR_COMMENT_MARKER}\n`, '');
-    assert.throws(() => stripEditorComment(content), /list of omitted changes/);
+  it('drops the remaining comments when some of them were deleted', () => {
+    const content = buildEditorContent('## 1.2.0\n\n- Add a thing\n', omitted)
+      .split('\n')
+      .filter(line => !line.includes('discarded when the editor closes'))
+      .join('\n');
+    assert.strictEqual(stripEditorComments(content), '## 1.2.0\n\n- Add a thing');
   });
 
-  it('keeps an HTML comment the user wrote themselves', () => {
+  it('keeps a comment that spans several lines', () => {
     assert.strictEqual(
-      stripEditorComment('## 1.2.0\n\n- Add a thing\n<!--\nnote to self\n-->\n'),
+      stripEditorComments('## 1.2.0\n\n- Add a thing\n<!--\nnote to self\n-->\n'),
       '## 1.2.0\n\n- Add a thing\n<!--\nnote to self\n-->',
     );
   });
 
-  it('leaves content without the marker alone, apart from surrounding whitespace', () => {
-    assert.strictEqual(stripEditorComment('\n## 1.2.0\n\n- Add a thing\n\n'), '## 1.2.0\n\n- Add a thing');
+  it('leaves content without comments alone, apart from surrounding whitespace', () => {
+    assert.strictEqual(
+      stripEditorComments('\n## 1.2.0\n\n- Add a thing\n\n'),
+      '## 1.2.0\n\n- Add a thing',
+    );
   });
 });
