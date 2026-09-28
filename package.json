@@ -9,6 +9,7 @@
   "scripts": {
     "build": "tsc --build",
     "clean": "rm -rf dist *.tsbuildinfo",
+    "format": "prettier --write .",
     "lint": "eslint .",
     "tsc": "tsc --build tsconfig.test.json",
     "test": "vitest run",
@@ -51,6 +52,7 @@
     "eslint-plugin-simple-import-sort": "^14.0.0",
     "eslint-plugin-unicorn": "^74.0.0",
     "jiti": "^2.7.0",
+    "prettier": "^3.9.9",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.70.1",
     "vitest": "^5.0.2"

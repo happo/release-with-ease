@@ -248,6 +248,7 @@ pnpm install
 pnpm test    # Vitest, straight from the TypeScript sources
 pnpm tsc     # type-check everything, including the tests
 pnpm lint    # ESLint
+pnpm format  # Prettier
 pnpm build   # compile src/ to dist/
 ```
 

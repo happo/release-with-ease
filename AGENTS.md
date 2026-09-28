@@ -32,6 +32,7 @@ mise exec -- pnpm test                  # Vitest, straight from the .ts sources
 mise exec -- pnpm test src/__tests__/git.test.ts
 mise exec -- pnpm tsc                   # type-check src/ including tests
 mise exec -- pnpm lint                  # ESLint
+mise exec -- pnpm format                # Prettier, over the whole repo
 mise exec -- pnpm build                 # compile src/ to dist/
 ```
 
