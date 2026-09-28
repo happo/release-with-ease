@@ -3,5 +3,10 @@
   "singleQuote": true,
   "trailingComma": "all",
   "arrowParens": "always",
-  "proseWrap": "never"
+  "overrides": [
+    {
+      "files": ["*.md", "*.mdx"],
+      "options": { "proseWrap": "never" }
+    }
+  ]
 }
