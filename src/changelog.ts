@@ -22,7 +22,9 @@ export function insertChangelogEntry(
   newReadmeLines: ReadonlyArray<string>,
 ): string {
   const lines = readmeContent.split('\n');
-  const changelogIdx = lines.findIndex(l => /^#\s*Changelog\s*$/i.test(l.trim()));
+  const changelogIdx = lines.findIndex((l) =>
+    /^#\s*Changelog\s*$/i.test(l.trim()),
+  );
 
   if (changelogIdx === -1) {
     throw new Error('Could not find "# Changelog" section in README.md');

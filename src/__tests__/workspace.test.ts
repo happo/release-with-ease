@@ -1,5 +1,6 @@
 import assert from 'node:assert';
 import fs from 'node:fs';
+
 import { afterEach, describe, it } from 'vitest';
 
 import { UsageError } from '../args.ts';
@@ -20,8 +21,12 @@ describe('resolvePackageDir', () => {
       {
         'package.json': JSON.stringify({ name: 'root', private: true }),
         'projects/server/package.json': JSON.stringify({ name: 'server' }),
-        'projects/happo-package/package.json': JSON.stringify({ name: 'happo' }),
-        'projects/merrykat/apps/web/package.json': JSON.stringify({ name: '@merrykat/web' }),
+        'projects/happo-package/package.json': JSON.stringify({
+          name: 'happo',
+        }),
+        'projects/merrykat/apps/web/package.json': JSON.stringify({
+          name: '@merrykat/web',
+        }),
       },
       'Add projects',
     );
@@ -44,7 +49,10 @@ describe('resolvePackageDir', () => {
   it('finds the root package by name', () => {
     tmpfs.mock({});
     monorepo();
-    assert.strictEqual(real(resolvePackageDir('root')), real(tmpfs.fullPath('work')));
+    assert.strictEqual(
+      real(resolvePackageDir('root')),
+      real(tmpfs.fullPath('work')),
+    );
   });
 
   it('finds a package by name from inside another one', () => {
@@ -69,8 +77,14 @@ describe('resolvePackageDir', () => {
   it('prefers a directory over a package of the same name', () => {
     tmpfs.mock({});
     const repo = monorepo();
-    repo.commit({ 'server/package.json': JSON.stringify({ name: 'not-server' }) }, 'Confuse');
-    assert.strictEqual(real(resolvePackageDir('server')), real(tmpfs.fullPath('work/server')));
+    repo.commit(
+      { 'server/package.json': JSON.stringify({ name: 'not-server' }) },
+      'Confuse',
+    );
+    assert.strictEqual(
+      real(resolvePackageDir('server')),
+      real(tmpfs.fullPath('work/server')),
+    );
   });
 
   it('ignores package.json files git does not track', () => {
@@ -110,7 +124,10 @@ describe('resolvePackageDir', () => {
   it('skips a package.json that does not parse', () => {
     tmpfs.mock({});
     const repo = monorepo();
-    repo.commit({ 'broken/package.json': '{ not json' }, 'Add a broken manifest');
+    repo.commit(
+      { 'broken/package.json': '{ not json' },
+      'Add a broken manifest',
+    );
     assert.strictEqual(
       real(resolvePackageDir('happo')),
       real(tmpfs.fullPath('work/projects/happo-package')),

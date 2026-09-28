@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+
 import { safeRun } from './exec.ts';
 import { shellQuote } from './git.ts';
 import { DEFAULT_TAG_PREFIX } from './tags.ts';
@@ -72,10 +73,13 @@ export function configuredPaths(pkg: PackageJson): Array<string> {
   const raw = config?.paths ?? config?.path;
   if (raw === undefined || raw === null) return [];
 
-  const list = (Array.isArray(raw) ? raw : [raw]).map(entry =>
+  const list = (Array.isArray(raw) ? raw : [raw]).map((entry) =>
     typeof entry === 'string' ? entry.trim() : entry,
   );
-  if (!list.length || list.some(entry => typeof entry !== 'string' || !entry)) {
+  if (
+    !list.length ||
+    list.some((entry) => typeof entry !== 'string' || !entry)
+  ) {
     throw new UsageError(
       '"release-with-ease".paths in package.json must be a path, or an array of paths.',
     );

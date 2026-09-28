@@ -1,0 +1,14 @@
+# Commits that only reformat or mechanically rewrite code, for `git blame` to
+# look past. GitHub's blame view reads this file on its own; to use it locally,
+# run once:
+#
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# Apply ESLint autofixes
+833f5c1204d3ef92138a03fdc9dbe74dbd5b1bee
+
+# Reformat with Prettier
+00451cb9892a0c75a8f25c9ed97550dc4f056630
+
+# Reformat with Prettier
+a5b72b8dbe7b26fdf95a4519b3039cb60e1361df

@@ -26,18 +26,18 @@ import path from 'node:path';
 import {
   configuredPaths,
   configuredTagPrefix,
-  parseArgs,
-  UsageError,
-  unscopedSubdirectoryWarning,
   type PackageJson,
+  parseArgs,
+  unscopedSubdirectoryWarning,
+  UsageError,
 } from './args.ts';
-import { askClaudeForRelease, type OmittedChange } from './claude.ts';
 import {
   hasReadmeChangelog,
   insertChangelogEntry,
   packageJsonPath,
   readmePath,
 } from './changelog.ts';
+import { askClaudeForRelease, type OmittedChange } from './claude.ts';
 import { run, safeRun } from './exec.ts';
 import {
   commitAndTagRelease,
@@ -50,12 +50,12 @@ import {
   shellQuote,
   tagExists,
 } from './git.ts';
-import { fetchGitHubMeta, type CommitWithMeta } from './github.ts';
+import { type CommitWithMeta, fetchGitHubMeta } from './github.ts';
 import { fetchNpmOtp } from './npm.ts';
 import { writeVersion } from './packageJson.ts';
 import { prompt } from './prompt.ts';
 import { releaseName } from './tags.ts';
-import { bumpVersionString, isBump, type Bump } from './version.ts';
+import { type Bump, bumpVersionString, isBump } from './version.ts';
 import { resolvePackageDir } from './workspace.ts';
 
 /**
@@ -64,7 +64,7 @@ import { resolvePackageDir } from './workspace.ts';
  * something.
  */
 export function formatCommitLine(commit: CommitWithMeta): string {
-  const shortSha = commit.hash.substring(0, 7);
+  const shortSha = commit.hash.slice(0, 7);
   const pr =
     commit.prNumber && !commit.subject.includes(`#${commit.prNumber}`)
       ? ` (#${commit.prNumber})`
@@ -98,7 +98,8 @@ export function buildEditorContent(
     ? [
         'Not covered by any bullet point above; add any that users should hear about:',
         ...omitted.map(
-          ({ commit, reason }) => `${formatCommitLine(commit)}: ${reason ?? '(no reason given)'}`,
+          ({ commit, reason }) =>
+            `${formatCommitLine(commit)}: ${reason ?? '(no reason given)'}`,
         ),
       ]
     : ['Every change in this release is covered by a bullet point above.'];
@@ -121,7 +122,7 @@ export function buildEditorContent(
 export function stripEditorComments(content: string): string {
   return content
     .split('\n')
-    .filter(line => !line.startsWith(EDITOR_COMMENT_PREFIX))
+    .filter((line) => !line.startsWith(EDITOR_COMMENT_PREFIX))
     .join('\n')
     .trim();
 }
@@ -132,8 +133,12 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
   // Check for required environment variable early
   if (!process.env['ANTHROPIC_API_KEY']) {
     console.error('❌ ANTHROPIC_API_KEY environment variable is required.');
-    console.error('   You can get one from https://console.anthropic.com/settings/keys');
-    console.error('   Please add it to your .env file: ANTHROPIC_API_KEY=your_key_here');
+    console.error(
+      '   You can get one from https://console.anthropic.com/settings/keys',
+    );
+    console.error(
+      '   Please add it to your .env file: ANTHROPIC_API_KEY=your_key_here',
+    );
     process.exit(1);
   }
 
@@ -147,15 +152,22 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
   if (packageName !== null) {
     const dir = resolvePackageDir(packageName);
     if (dir !== process.cwd()) {
-      console.log(`📦 Releasing from ${path.relative(process.cwd(), dir) || '.'}\n`);
+      console.log(
+        `📦 Releasing from ${path.relative(process.cwd(), dir) || '.'}\n`,
+      );
       process.chdir(dir);
     }
   }
 
-  const pkg = JSON.parse(fs.readFileSync(packageJsonPath(), 'utf8')) as PackageJson;
+  const pkg = JSON.parse(
+    fs.readFileSync(packageJsonPath(), 'utf8'),
+  ) as PackageJson;
   const isPublicPackage = pkg.private !== true && pkg.private !== 'true';
   const privateFieldMissing = isPublicPackage && pkg.private === undefined;
   const paths = pathArgs.length ? pathArgs : configuredPaths(pkg);
+  // Validated here, before the fetch below, so that a bad tagPrefix in
+  // package.json fails without touching the remote.
+  // eslint-disable-next-line unicorn/no-declarations-before-early-exit
   const tagPrefix = configuredTagPrefix(pkg);
 
   // The check below for a tag that already exists, and finding the last
@@ -166,7 +178,10 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
     );
   }
   const { defaultBranch } = preflightChecks();
-  const { tag: lastVersionTag, fromDefaultPrefix } = getLastReleaseTag(tagPrefix, pkg.version);
+  const { tag: lastVersionTag, fromDefaultPrefix } = getLastReleaseTag(
+    tagPrefix,
+    pkg.version,
+  );
   if (fromDefaultPrefix) {
     console.log(
       `ℹ️  No ${tagPrefix} tags yet; starting from ${lastVersionTag}, the tag for the version in package.json.`,
@@ -177,7 +192,7 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
   if (warning) console.log(warning);
 
   const raw = getCommitRange(lastVersionTag, paths);
-  let commits: Array<CommitWithMeta> = parseCommits(raw).map(c => ({
+  let commits: Array<CommitWithMeta> = parseCommits(raw).map((c) => ({
     ...c,
     githubLogin: null,
     prNumber: null,
@@ -207,7 +222,7 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
       paths.length ? ` (limited to ${paths.join(', ')})` : ''
     }:`,
   );
-  commits.forEach(commit => console.log(formatCommitLine(commit)));
+  for (const commit of commits) console.log(formatCommitLine(commit));
 
   console.log('\nWaiting for Claude to analyze commits...');
 
@@ -220,7 +235,9 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
 
   console.log(`\nSuggested version bump: ${bump}\n`);
   console.log(`Reasoning:\n\n${reasoning}\n`);
-  const confirm = (await prompt('Proceed with this bump? [Y/n/major/minor/patch] '))
+  const confirm = (
+    await prompt('Proceed with this bump? [Y/n/major/minor/patch] ')
+  )
     .trim()
     .toLowerCase();
   let finalBump: Bump = bump;
@@ -245,7 +262,7 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
   }
 
   console.log(`\n📝 Release notes for ${newVersion}:`);
-  notes.forEach(note => console.log(`  ${note}`));
+  for (const note of notes) console.log(`  ${note}`);
 
   // Create a temporary file with just the changelog entry
   const randomName = `changelog-entry-${crypto.randomBytes(8).toString('hex')}.tmp`;
@@ -253,8 +270,12 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
   const entryContent = [`## ${newVersion}`, '', ...notes, ''].join('\n');
   fs.writeFileSync(tempEntryPath, buildEditorContent(entryContent, omitted));
 
-  console.log(`\n📝 Opening editor to review changelog entry for ${newVersion}...`);
-  console.log('   Edit the changelog entry as needed, then save and close the editor.');
+  console.log(
+    `\n📝 Opening editor to review changelog entry for ${newVersion}...`,
+  );
+  console.log(
+    '   Edit the changelog entry as needed, then save and close the editor.',
+  );
 
   // Open editor with the temporary entry file
   const editor = process.env['EDITOR'] || process.env['VISUAL'] || 'nano';
@@ -282,19 +303,31 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
     console.log(`\n🔍 DRY RUN - Would have done the following:`);
     let step = 1;
     if (useReadmeChangelog) {
-      console.log(`  ${step++}. Insert changelog entry for ${newVersion} into README.md`);
+      console.log(
+        `  ${step++}. Insert changelog entry for ${newVersion} into README.md`,
+      );
       console.log(`  ${step++}. git add README.md`);
-      console.log(`  ${step++}. git commit -m "Update changelog for ${release.label}"`);
+      console.log(
+        `  ${step++}. git commit -m "Update changelog for ${release.label}"`,
+      );
     }
-    console.log(`  ${step++}. Set "version": "${newVersion}" in package.json (and any npm lockfile)`);
-    console.log(`  ${step++}. git commit -m "${release.label}" + tag ${release.tag}`);
-    console.log(`  ${step++}. git push origin ${defaultBranch} refs/tags/${release.tag}`);
+    console.log(
+      `  ${step++}. Set "version": "${newVersion}" in package.json (and any npm lockfile)`,
+    );
+    console.log(
+      `  ${step++}. git commit -m "${release.label}" + tag ${release.tag}`,
+    );
+    console.log(
+      `  ${step++}. git push origin ${defaultBranch} refs/tags/${release.tag}`,
+    );
     console.log(
       `  ${step++}. gh release create ${release.tag} --title "${release.title}" --notes-file <entry>`,
     );
     if (isPublicPackage) {
-      console.log(`  ${step++}. npm whoami (run npm login if not authenticated)`);
-      console.log(`  ${step++}. npm publish`);
+      console.log(
+        `  ${step++}. npm whoami (run npm login if not authenticated)`,
+      );
+      console.log(`  ${step}. npm publish`);
       if (privateFieldMissing) {
         console.log(
           `\n⚠️  Warning: package.json has no "private" field. The package will be published to npm.\n` +
@@ -308,7 +341,9 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
   }
 
   // Read the edited entry
-  const editedEntry = stripEditorComments(fs.readFileSync(tempEntryPath, 'utf8'));
+  const editedEntry = stripEditorComments(
+    fs.readFileSync(tempEntryPath, 'utf8'),
+  );
 
   if (useReadmeChangelog) {
     // Insert changelog entry into README.md
@@ -345,7 +380,9 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
       console.log(
         `\n⚠️  Warning: package.json has no "private" field. About to publish ${pkg.name} to npm.`,
       );
-      const answer = (await prompt('   Confirm publish? [y/N] ')).trim().toLowerCase();
+      const answer = (await prompt('   Confirm publish? [y/N] '))
+        .trim()
+        .toLowerCase();
       if (answer !== 'y' && answer !== 'yes') {
         console.log(
           'Aborted. Set "private": false in package.json to suppress this prompt.',
@@ -355,7 +392,9 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
     }
     const whoami = safeRun('npm whoami');
     if (!whoami.ok) {
-      console.log('\n🔐 Not logged in to npm. Opening browser for npm login...');
+      console.log(
+        '\n🔐 Not logged in to npm. Opening browser for npm login...',
+      );
       const loginResult = safeRun('npm login', { stdio: 'inherit' });
       if (!loginResult.ok) {
         throw loginResult.err;

@@ -1,7 +1,8 @@
 import assert from 'node:assert';
 import http from 'node:http';
-import { afterEach, describe, it } from 'vitest';
 import type { AddressInfo } from 'node:net';
+
+import { afterEach, describe, it } from 'vitest';
 
 import {
   askClaudeForRelease,
@@ -48,16 +49,24 @@ describe('buildSystemPrompt', () => {
 
 describe('buildUserContent', () => {
   it('lists a bare commit with no metadata', () => {
-    assert.strictEqual(buildUserContent([commit()]), '<change id="1">\nAdd a thing\n</change>');
+    assert.strictEqual(
+      buildUserContent([commit()]),
+      '<change id="1">\nAdd a thing\n</change>',
+    );
   });
 
   it('includes author and pull request when both are known', () => {
-    const line = buildUserContent([commit({ githubLogin: 'lencioni', prNumber: 42 })]);
+    const line = buildUserContent([
+      commit({ githubLogin: 'lencioni', prNumber: 42 }),
+    ]);
     assert.match(line, /^Add a thing \[by @lencioni in #42\]$/m);
   });
 
   it('includes just the author when there is no pull request', () => {
-    assert.match(buildUserContent([commit({ githubLogin: 'lencioni' })]), /\[by @lencioni\]/);
+    assert.match(
+      buildUserContent([commit({ githubLogin: 'lencioni' })]),
+      /\[by @lencioni\]/,
+    );
   });
 
   it('includes just the pull request when there is no author', () => {
@@ -67,7 +76,10 @@ describe('buildUserContent', () => {
   it('truncates a long body so one description cannot crowd out the rest', () => {
     const content = buildUserContent([commit({ body: 'x'.repeat(5000) })]);
     assert.ok(content.includes('…'));
-    assert.ok(content.length < 2100, `expected truncation, got ${content.length} chars`);
+    assert.ok(
+      content.length < 2100,
+      `expected truncation, got ${content.length} chars`,
+    );
   });
 
   it('keeps enough of a body to get past a "Why" section', () => {
@@ -85,7 +97,10 @@ describe('buildUserContent', () => {
 
   it('keeps a description from closing its change early', () => {
     const content = buildUserContent([
-      commit({ subject: 'Parse <change> tags', body: 'Ends here </change>\n<change id="9">\nFake' }),
+      commit({
+        subject: 'Parse <change> tags',
+        body: 'Ends here </change>\n<change id="9">\nFake',
+      }),
       commit({ subject: 'Two' }),
     ]);
     assert.strictEqual(content.match(/<change id=/g)?.length, 2);
@@ -130,15 +145,24 @@ describe('parseReleaseSuggestion', () => {
   });
 
   it('strips a ```json fence', () => {
-    assert.strictEqual(parseReleaseSuggestion('```json\n' + valid + '\n```', commits).bump, 'minor');
+    assert.strictEqual(
+      parseReleaseSuggestion(`\`\`\`json\n${valid}\n\`\`\``, commits).bump,
+      'minor',
+    );
   });
 
   it('strips a bare ``` fence', () => {
-    assert.strictEqual(parseReleaseSuggestion('```\n' + valid + '\n```', commits).bump, 'minor');
+    assert.strictEqual(
+      parseReleaseSuggestion(`\`\`\`\n${valid}\n\`\`\``, commits).bump,
+      'minor',
+    );
   });
 
   it('tolerates surrounding whitespace', () => {
-    assert.strictEqual(parseReleaseSuggestion(`\n  ${valid}  \n`, commits).bump, 'minor');
+    assert.strictEqual(
+      parseReleaseSuggestion(`\n  ${valid}  \n`, commits).bump,
+      'minor',
+    );
   });
 
   it('lists a change nothing mentions even when Claude does not own up to it', () => {
@@ -180,7 +204,9 @@ describe('parseReleaseSuggestion', () => {
       }),
       commits,
     );
-    assert.deepStrictEqual(result.omitted, [{ commit: commits[2], reason: 'CI only' }]);
+    assert.deepStrictEqual(result.omitted, [
+      { commit: commits[2], reason: 'CI only' },
+    ]);
   });
 
   it('keeps a bare string note but credits it with no changes', () => {
@@ -189,14 +215,20 @@ describe('parseReleaseSuggestion', () => {
       commits.slice(0, 1),
     );
     assert.deepStrictEqual(result.notes, ['- Add a thing']);
-    assert.deepStrictEqual(result.omitted, [{ commit: commits[0], reason: null }]);
+    assert.deepStrictEqual(result.omitted, [
+      { commit: commits[0], reason: null },
+    ]);
   });
 
   it('rejects a note without text', () => {
     assert.throws(
       () =>
         parseReleaseSuggestion(
-          JSON.stringify({ bump: 'patch', reasoning: 'r', notes: [{ changes: [1] }] }),
+          JSON.stringify({
+            bump: 'patch',
+            reasoning: 'r',
+            notes: [{ changes: [1] }],
+          }),
           commits,
         ),
       /Invalid note/,
@@ -205,14 +237,22 @@ describe('parseReleaseSuggestion', () => {
 
   it('rejects a bump that is not a semver keyword', () => {
     assert.throws(
-      () => parseReleaseSuggestion(JSON.stringify({ bump: 'huge', reasoning: 'r', notes: [] }), commits),
+      () =>
+        parseReleaseSuggestion(
+          JSON.stringify({ bump: 'huge', reasoning: 'r', notes: [] }),
+          commits,
+        ),
       /Invalid bump value/,
     );
   });
 
   it('rejects a missing reasoning', () => {
     assert.throws(
-      () => parseReleaseSuggestion(JSON.stringify({ bump: 'patch', notes: [] }), commits),
+      () =>
+        parseReleaseSuggestion(
+          JSON.stringify({ bump: 'patch', notes: [] }),
+          commits,
+        ),
       /Missing reasoning/,
     );
   });
@@ -229,7 +269,10 @@ describe('parseReleaseSuggestion', () => {
   });
 
   it('rejects unparseable output', () => {
-    assert.throws(() => parseReleaseSuggestion('I think you should bump minor.', commits), SyntaxError);
+    assert.throws(
+      () => parseReleaseSuggestion('I think you should bump minor.', commits),
+      SyntaxError,
+    );
   });
 });
 
@@ -241,7 +284,7 @@ describe('askClaudeForRelease', () => {
     process.env['ANTHROPIC_API_KEY'] = env['ANTHROPIC_API_KEY'];
     process.env['ANTHROPIC_BASE_URL'] = env['ANTHROPIC_BASE_URL'];
     if (server) {
-      await new Promise<void>(resolve => server?.close(() => resolve()));
+      await new Promise<void>((resolve) => server?.close(() => resolve()));
       server = undefined;
     }
   });
@@ -253,21 +296,30 @@ describe('askClaudeForRelease', () => {
    * the Anthropic SDKs expose.
    */
   async function serve(
-    handler: (req: http.IncomingMessage, body: string, res: http.ServerResponse) => void,
+    handler: (
+      req: http.IncomingMessage,
+      body: string,
+      res: http.ServerResponse,
+    ) => void,
   ): Promise<void> {
     server = http.createServer((req, res) => {
       let body = '';
-      req.on('data', chunk => (body += chunk));
+      req.on('data', (chunk) => (body += chunk));
       req.on('end', () => handler(req, body, res));
     });
-    await new Promise<void>(resolve => server?.listen(0, '127.0.0.1', resolve));
+    await new Promise<void>((resolve) =>
+      server?.listen(0, '127.0.0.1', resolve),
+    );
     const { port } = server.address() as AddressInfo;
     process.env['ANTHROPIC_BASE_URL'] = `http://127.0.0.1:${port}`;
     process.env['ANTHROPIC_API_KEY'] = 'test-key';
   }
 
   const reply = (text: unknown) =>
-    JSON.stringify({ stop_reason: 'end_turn', content: [{ type: 'text', text }] });
+    JSON.stringify({
+      stop_reason: 'end_turn',
+      content: [{ type: 'text', text }],
+    });
 
   it('is null without an API key, rather than calling anything', async () => {
     delete process.env['ANTHROPIC_API_KEY'];
@@ -305,16 +357,25 @@ describe('askClaudeForRelease', () => {
   });
 
   it('sends the commits as the user message', async () => {
-    let payload: { system?: string; messages?: Array<{ content?: string }> } = {};
+    let payload: { system?: string; messages?: Array<{ content?: string }> } =
+      {};
     await serve((_req, body, res) => {
       payload = JSON.parse(body);
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(reply(JSON.stringify({ bump: 'minor', reasoning: 'r', notes: ['n'] })));
+      res.end(
+        reply(JSON.stringify({ bump: 'minor', reasoning: 'r', notes: ['n'] })),
+      );
     });
 
-    await askClaudeForRelease([commit({ subject: 'Add a thing', prNumber: 42 })], true);
+    await askClaudeForRelease(
+      [commit({ subject: 'Add a thing', prNumber: 42 })],
+      true,
+    );
 
-    assert.match(payload.messages?.[0]?.content ?? '', /<change id="1">\nAdd a thing \[in #42\]/);
+    assert.match(
+      payload.messages?.[0]?.content ?? '',
+      /<change id="1">\nAdd a thing \[in #42\]/,
+    );
     assert.match(payload.system ?? '', /\[by @login in #123\]/);
   });
 
@@ -326,7 +387,14 @@ describe('askClaudeForRelease', () => {
           stop_reason: 'end_turn',
           content: [
             { type: 'thinking', thinking: '' },
-            { type: 'text', text: JSON.stringify({ bump: 'minor', reasoning: 'r', notes: [] }) },
+            {
+              type: 'text',
+              text: JSON.stringify({
+                bump: 'minor',
+                reasoning: 'r',
+                notes: [],
+              }),
+            },
           ],
         }),
       );
@@ -340,7 +408,9 @@ describe('askClaudeForRelease', () => {
     await serve((_req, body, res) => {
       payload = JSON.parse(body);
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(reply(JSON.stringify({ bump: 'patch', reasoning: 'r', notes: [] })));
+      res.end(
+        reply(JSON.stringify({ bump: 'patch', reasoning: 'r', notes: [] })),
+      );
     });
 
     await askClaudeForRelease([commit()]);
@@ -361,7 +431,10 @@ describe('askClaudeForRelease', () => {
       );
     });
 
-    await assert.rejects(() => askClaudeForRelease([commit()]), /stop reason: max_tokens/);
+    await assert.rejects(
+      () => askClaudeForRelease([commit()]),
+      /stop reason: max_tokens/,
+    );
   });
 
   it('throws with the status when the API refuses', async () => {
@@ -371,7 +444,11 @@ describe('askClaudeForRelease', () => {
     });
 
     await assert.rejects(
-      () => askClaudeForRelease([commit()], false, { sleep: async () => {}, maxRetries: 0 }),
+      () =>
+        askClaudeForRelease([commit()], false, {
+          sleep: () => Promise.resolve(),
+          maxRetries: 0,
+        }),
       /Failed to determine version bump:.*429/,
     );
   });
@@ -386,7 +463,10 @@ describe('askClaudeForRelease', () => {
   });
 
   /** Records the delays a fake sleep was called with instead of waiting for real time. */
-  function fakeSleep(): { sleep: (ms: number) => Promise<void>; delays: Array<number> } {
+  function fakeSleep(): {
+    sleep: (ms: number) => Promise<void>;
+    delays: Array<number>;
+  } {
     const delays: Array<number> = [];
     return {
       delays,
@@ -402,11 +482,15 @@ describe('askClaudeForRelease', () => {
       requests++;
       if (requests < 3) {
         res.writeHead(529, { 'Content-Type': 'application/json' });
-        res.end('{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}');
+        res.end(
+          '{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}',
+        );
         return;
       }
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(reply(JSON.stringify({ bump: 'patch', reasoning: 'r', notes: ['n'] })));
+      res.end(
+        reply(JSON.stringify({ bump: 'patch', reasoning: 'r', notes: ['n'] })),
+      );
     });
 
     const { sleep, delays } = fakeSleep();
@@ -422,12 +506,17 @@ describe('askClaudeForRelease', () => {
     await serve((_req, _body, res) => {
       requests++;
       if (requests === 1) {
-        res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '2' });
+        res.writeHead(429, {
+          'Content-Type': 'application/json',
+          'Retry-After': '2',
+        });
         res.end('{"error":"rate limited"}');
         return;
       }
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(reply(JSON.stringify({ bump: 'minor', reasoning: 'r', notes: ['n'] })));
+      res.end(
+        reply(JSON.stringify({ bump: 'minor', reasoning: 'r', notes: ['n'] })),
+      );
     });
 
     const { sleep, delays } = fakeSleep();
@@ -443,7 +532,9 @@ describe('askClaudeForRelease', () => {
     await serve((_req, _body, res) => {
       requests++;
       res.writeHead(529, { 'Content-Type': 'application/json' });
-      res.end('{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}');
+      res.end(
+        '{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}',
+      );
     });
 
     const { sleep } = fakeSleep();

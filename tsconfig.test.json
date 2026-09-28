@@ -1,12 +1,17 @@
 {
-  // Tests are type-checked but never emitted: Vitest runs them from source, so
+  // Tests and the root config files (eslint.config.ts, vitest.config.ts) are
+  // type-checked but never emitted: Vitest runs the tests from source, so
   // nothing about them belongs in `dist/`.
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "noEmit": true,
+    "rootDir": ".",
+    // With rootDir ".", tsc --build would put this next to the output, in
+    // dist/, which is what npm publishes. Keep it at the root, as before.
+    "tsBuildInfoFile": "./tsconfig.test.tsbuildinfo",
     "declaration": false,
     "declarationMap": false
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "*.ts"],
   "exclude": []
 }

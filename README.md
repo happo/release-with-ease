@@ -1,7 +1,6 @@
 # release-with-ease
 
-A script that helps you bump the version of an npm library and update release
-notes. Uses Claude to analyze commits.
+A script that helps you bump the version of an npm library and update release notes. Uses Claude to analyze commits.
 
 # Usage
 
@@ -17,9 +16,7 @@ If you just want to preview the changes that would be made, use the `--dry-run` 
 npx release-with-ease --dry-run
 ```
 
-The script reads `package.json` and `README.md` from the current directory, so
-run it from the package you want to release — or name the package, and it
-finds it (see [Monorepos](#monorepos)):
+The script reads `package.json` and `README.md` from the current directory, so run it from the package you want to release — or name the package, and it finds it (see [Monorepos](#monorepos)):
 
 ```sh
 npx release-with-ease my-package
@@ -27,65 +24,31 @@ npx release-with-ease my-package
 
 A release:
 
-1. inserts the release notes into the `# Changelog` section of `README.md`, if
-   there is one, and commits that;
-2. sets `"version"` in `package.json` (and in `package-lock.json` or
-   `npm-shrinkwrap.json`, if there is one next to it), commits it and tags the
-   commit;
+1. inserts the release notes into the `# Changelog` section of `README.md`, if there is one, and commits that;
+2. sets `"version"` in `package.json` (and in `package-lock.json` or `npm-shrinkwrap.json`, if there is one next to it), commits it and tags the commit;
 3. pushes the branch and that tag;
 4. creates a GitHub release for the tag;
 5. publishes to npm, unless the package is private.
 
-The version is written to `package.json` directly rather than through
-`npm version`, so `preversion`, `version` and `postversion` scripts are not run.
+The version is written to `package.json` directly rather than through `npm version`, so `preversion`, `version` and `postversion` scripts are not run.
 
 # How commits become release notes
 
-The script walks the mainline with `git log --first-parent`, so each merged
-pull request contributes one entry rather than every commit it accumulated
-along the way. For public packages it then asks `gh` which pull request each
-mainline commit came from and uses that pull request's title, description and
-author, which reads better than `Merge pull request #123 from owner/branch`.
+The script walks the mainline with `git log --first-parent`, so each merged pull request contributes one entry rather than every commit it accumulated along the way. For public packages it then asks `gh` which pull request each mainline commit came from and uses that pull request's title, description and author, which reads better than `Merge pull request #123 from owner/branch`.
 
-GitHub merges a **stacked pull request** as a single commit on the mainline,
-and every pull request in the stack reports that same commit as its merge
-commit. The script expands such a commit back into one entry per pull request,
-bottom of the stack first, so the ones underneath the top get described instead
-of disappearing into their neighbour's merge commit. With `--path` set, each
-pull request in the stack is matched against the pathspec on its own, so a
-stack that spans several packages only shows up where it belongs.
+GitHub merges a **stacked pull request** as a single commit on the mainline, and every pull request in the stack reports that same commit as its merge commit. The script expands such a commit back into one entry per pull request, bottom of the stack first, so the ones underneath the top get described instead of disappearing into their neighbour's merge commit. With `--path` set, each pull request in the stack is matched against the pathspec on its own, so a stack that spans several packages only shows up where it belongs.
 
-The order comes from the branch each pull request was based on, but only after
-git confirms the commits line up that way and that all of them are part of the
-merge. Branch names can be reused, and a branch can be pushed to after it
-merged, so where the claim doesn't check out the entries fall back to the order
-they were opened in and the pathspec is applied to the stack as a whole. That
-can leave a bullet point too many, which is easy to delete in the editor step —
-unlike a pull request credited with files it never touched.
+The order comes from the branch each pull request was based on, but only after git confirms the commits line up that way and that all of them are part of the merge. Branch names can be reused, and a branch can be pushed to after it merged, so where the claim doesn't check out the entries fall back to the order they were opened in and the pathspec is applied to the stack as a whole. That can leave a bullet point too many, which is easy to delete in the editor step — unlike a pull request credited with files it never touched.
 
-The list of entries is printed before anything is sent to Claude — worth a
-glance, since it is what the release notes are written from.
+The list of entries is printed before anything is sent to Claude — worth a glance, since it is what the release notes are written from.
 
-Claude is asked for notes that cover every user-facing change, however many
-bullet points that takes, sorted by their impact on users. Each bullet point
-names the entries it describes, so when the editor opens, comments below the
-entry list every entry no bullet point covers, with Claude's reason for leaving
-it out. Each of those lines starts with `//`, like `#` in a git commit message,
-and every line that does is dropped when the editor closes, so there is nothing
-to clean up — and turning one into a bullet point is a matter of editing that
-line. The list is worked out from which entries the notes cite, not from what
-Claude says it left out, so an entry it drops without saying so is listed too.
+Claude is asked for notes that cover every user-facing change, however many bullet points that takes, sorted by their impact on users. Each bullet point names the entries it describes, so when the editor opens, comments below the entry list every entry no bullet point covers, with Claude's reason for leaving it out. Each of those lines starts with `//`, like `#` in a git commit message, and every line that does is dropped when the editor closes, so there is nothing to clean up — and turning one into a bullet point is a matter of editing that line. The list is worked out from which entries the notes cite, not from what Claude says it left out, so an entry it drops without saying so is listed too.
 
 # Monorepos
 
-By default the release notes are written from every commit on the mainline
-since the last `v*` tag — the whole repository. In a monorepo that means a
-release of one package is described using changes to all the others, and
-nothing about the result looks wrong afterwards.
+By default the release notes are written from every commit on the mainline since the last `v*` tag — the whole repository. In a monorepo that means a release of one package is described using changes to all the others, and nothing about the result looks wrong afterwards.
 
-Pass `--path` to limit the commits to the ones that touched a path. It takes a
-git pathspec, interpreted relative to the current directory (the package's own,
-when a package is named), and can be repeated:
+Pass `--path` to limit the commits to the ones that touched a path. It takes a git pathspec, interpreted relative to the current directory (the package's own, when a package is named), and can be repeated:
 
 ```sh
 cd packages/cli
@@ -95,8 +58,7 @@ npx release-with-ease --path .
 npx release-with-ease --path packages/cli --path packages/shared
 ```
 
-Since a package wants the same pathspec on every release, it is usually better
-to put it in the `package.json` being released:
+Since a package wants the same pathspec on every release, it is usually better to put it in the `package.json` being released:
 
 ```json
 {
@@ -105,16 +67,11 @@ to put it in the `package.json` being released:
 }
 ```
 
-A `--path` flag on the command line overrides the configured paths. The script
-warns when it is releasing a package from a subdirectory with no paths set at
-all, since that is nearly always an oversight rather than a choice.
+A `--path` flag on the command line overrides the configured paths. The script warns when it is releasing a package from a subdirectory with no paths set at all, since that is nearly always an oversight rather than a choice.
 
 ## Tag prefixes
 
-Tags are `vX.Y.Z` by default, which is one series of versions for the whole
-repository. For more than one package to release from the same repository,
-each needs a series of its own. Set `tagPrefix`, conventionally to the
-package's name and an `@`:
+Tags are `vX.Y.Z` by default, which is one series of versions for the whole repository. For more than one package to release from the same repository, each needs a series of its own. Set `tagPrefix`, conventionally to the package's name and an `@`:
 
 ```json
 {
@@ -123,36 +80,24 @@ package's name and an `@`:
 }
 ```
 
-The package's last release is then the most recent `my-cli@X.Y.Z` tag, the next
-one is tagged `my-cli@X.Y.Z`, and its GitHub release is titled `my-cli X.Y.Z`.
-Commit messages use the whole tag (`Update changelog for my-cli@1.3.0`,
-`my-cli@1.3.0`), since a bare version does not say which package it was. Only
-the new tag is pushed, not every tag that happens to exist locally.
+The package's last release is then the most recent `my-cli@X.Y.Z` tag, the next one is tagged `my-cli@X.Y.Z`, and its GitHub release is titled `my-cli X.Y.Z`. Commit messages use the whole tag (`Update changelog for my-cli@1.3.0`, `my-cli@1.3.0`), since a bare version does not say which package it was. Only the new tag is pushed, not every tag that happens to exist locally.
 
-Switching an existing package over needs no new tag by hand: when there is no
-`my-cli@` tag yet, the `v` tag for the current version in `package.json` (say
-`v1.2.0`) is where the release notes start from, and the release after it is
-`my-cli@1.3.0`.
+Switching an existing package over needs no new tag by hand: when there is no `my-cli@` tag yet, the `v` tag for the current version in `package.json` (say `v1.2.0`) is where the release notes start from, and the release after it is `my-cli@1.3.0`.
 
-A prefix has to make a valid git tag once a version is appended, so `:`,
-spaces and glob characters are refused.
+A prefix has to make a valid git tag once a version is appended, so `:`, spaces and glob characters are refused.
 
 ## Releasing from the repository root
 
-Name the package to release, and the script runs in that package's directory
-as if it had been started there:
+Name the package to release, and the script runs in that package's directory as if it had been started there:
 
 ```sh
 npx release-with-ease my-cli
 npx release-with-ease packages/cli   # a directory works too
 ```
 
-A name is looked up among the `package.json` files git tracks, so it works with
-any workspace layout. Everything else — `package.json`, `README.md`, `--path`,
-the configured paths — is then relative to that package.
+A name is looked up among the `package.json` files git tracks, so it works with any workspace layout. Everything else — `package.json`, `README.md`, `--path`, the configured paths — is then relative to that package.
 
-A root script makes that `pnpm release <package>`, with the environment
-variables from the root `.env`:
+A root script makes that `pnpm release <package>`, with the environment variables from the root `.env`:
 
 ```json
 {
@@ -175,52 +120,36 @@ The script requires these environment variables to be set:
 
 You can get a key from https://console.anthropic.com/settings/keys.
 
-The script also requires the `gh` CLI to be installed and authenticated (used to
-create GitHub releases).
+The script also requires the `gh` CLI to be installed and authenticated (used to create GitHub releases).
 
-If your `README.md` has a `# Changelog` section, the script will automatically
-insert the release notes there. Otherwise it skips that step and relies solely on
-the GitHub release.
+If your `README.md` has a `# Changelog` section, the script will automatically insert the release notes there. Otherwise it skips that step and relies solely on the GitHub release.
 
 # Publishing to npm
 
-For public packages (i.e. without `"private": true` in `package.json`), the
-script publishes to npm after creating the GitHub release.
+For public packages (i.e. without `"private": true` in `package.json`), the script publishes to npm after creating the GitHub release.
 
 ## Authentication
 
-Before publishing, the script runs `npm whoami` to check whether you're
-logged in. If you're not, it runs `npm login`, which opens a browser for
-the standard npm web auth flow. After that, `npm publish` runs normally.
+Before publishing, the script runs `npm whoami` to check whether you're logged in. If you're not, it runs `npm login`, which opens a browser for the standard npm web auth flow. After that, `npm publish` runs normally.
 
 ## 2FA and one-time passwords (OTP)
 
-For supply-chain security, we recommend keeping your npm account on the
-`auth-and-writes` 2FA mode, which requires an OTP for every publish:
+For supply-chain security, we recommend keeping your npm account on the `auth-and-writes` 2FA mode, which requires an OTP for every publish:
 
 ```sh
 npm profile set 2fa auth-and-writes
 ```
 
-`auth-and-writes` protects against stolen-token attacks — a leaked
-`~/.npmrc` token cannot publish without a live OTP. The alternative
-(`auth-only`) skips the publish-time OTP but offers less protection if
-your local npm token is ever stolen.
+`auth-and-writes` protects against stolen-token attacks — a leaked `~/.npmrc` token cannot publish without a live OTP. The alternative (`auth-only`) skips the publish-time OTP but offers less protection if your local npm token is ever stolen.
 
-To avoid typing the OTP manually, the script auto-detects a TOTP from
-either of these password manager CLIs:
+To avoid typing the OTP manually, the script auto-detects a TOTP from either of these password manager CLIs:
 
-- **1Password**: [`op`](https://developer.1password.com/docs/cli/) — uses
-  `op item get <name> --otp`
-- **LastPass**: [`lpass`](https://github.com/lastpass/lastpass-cli) — uses
-  `lpass show --totp <name>`
+- **1Password**: [`op`](https://developer.1password.com/docs/cli/) — uses `op item get <name> --otp`
+- **LastPass**: [`lpass`](https://github.com/lastpass/lastpass-cli) — uses `lpass show --totp <name>`
 
-For auto-detection to work, name your npm vault entry `npmjs.com` (or
-`npm`, or `npmjs` — the script tries each in order) and make sure the
-respective CLI is installed and signed in.
+For auto-detection to work, name your npm vault entry `npmjs.com` (or `npm`, or `npmjs` — the script tries each in order) and make sure the respective CLI is installed and signed in.
 
-If your setup doesn't fit the convention above, set `NPM_OTP_COMMAND` to
-any shell command that prints a fresh OTP to stdout:
+If your setup doesn't fit the convention above, set `NPM_OTP_COMMAND` to any shell command that prints a fresh OTP to stdout:
 
 ```sh
 # 1Password with a custom item name
@@ -230,38 +159,27 @@ export NPM_OTP_COMMAND='lpass show --totp "my npm entry"'
 # oathtool, ykman, etc. also work
 ```
 
-If no OTP source is available, npm's native OTP prompt appears at publish
-time and you can type the code by hand.
+If no OTP source is available, npm's native OTP prompt appears at publish time and you can type the code by hand.
 
 # Development
 
-The source is TypeScript under `src/`, compiled to `dist/` by `tsc`. The
-published `bin/release-with-ease.js` is a shim over the compiled output, so
-what `npx` runs is ordinary JavaScript and the `engines` floor holds.
+The source is TypeScript under `src/`, compiled to `dist/` by `tsc`. The published `bin/release-with-ease.js` is a shim over the compiled output, so what `npx` runs is ordinary JavaScript and the `engines` floor holds.
 
-Node and pnpm versions are pinned in `mise.toml`, so
-[mise](https://mise.jdx.dev/) will put the right ones on your path:
+Node and pnpm versions are pinned in `mise.toml`, so [mise](https://mise.jdx.dev/) will put the right ones on your path once it is [activated in your shell](https://mise.jdx.dev/getting-started.html#activate-mise). Without activation, prefix each command with `mise exec --` (for example `mise exec -- pnpm test`):
 
 ```sh
 mise install
 pnpm install
 pnpm test    # Vitest, straight from the TypeScript sources
 pnpm tsc     # type-check everything, including the tests
+pnpm lint    # ESLint
+pnpm format  # Prettier
 pnpm build   # compile src/ to dist/
 ```
 
-Working on the package needs a newer Node than using it does: the tests run
-under Vitest, which wants Node 22.12+ or 24+, while the published JavaScript
-only needs what `engines` says. CI checks both.
+Working on the package needs a newer Node than using it does: the tests run under Vitest, which wants Node 22.12+ or 24+, while the published JavaScript only needs what `engines` says. CI checks both.
 
-Tests assert with `node:assert` and mock nothing. Instead, they build real
-git repositories in a temporary directory and run
-real `git` against them, so the merge shapes under test — a stack landing as
-one commit, a branch behind its origin — are the shapes git actually
-produces. Where an external command has to be stood in for, it is stood in
-for at the lowest level available: `gh` is a real executable placed on `PATH`,
-and the Anthropic API is a real HTTP server on localhost reached through
-`ANTHROPIC_BASE_URL`.
+Tests assert with `node:assert` and mock nothing. Instead, they build real git repositories in a temporary directory and run real `git` against them, so the merge shapes under test — a stack landing as one commit, a branch behind its origin — are the shapes git actually produces. Where an external command has to be stood in for, it is stood in for at the lowest level available: `gh` is a real executable placed on `PATH`, and the Anthropic API is a real HTTP server on localhost reached through `ANTHROPIC_BASE_URL`.
 
 # Changelog
 

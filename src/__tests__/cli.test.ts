@@ -1,7 +1,12 @@
 import assert from 'node:assert';
+
 import { describe, it } from 'vitest';
 
-import { buildEditorContent, formatCommitLine, stripEditorComments } from '../cli.ts';
+import {
+  buildEditorContent,
+  formatCommitLine,
+  stripEditorComments,
+} from '../cli.ts';
 import type { CommitWithMeta } from '../github.ts';
 
 function commit(overrides: Partial<CommitWithMeta> = {}): CommitWithMeta {
@@ -29,14 +34,18 @@ describe('formatCommitLine', () => {
 
   it('does not repeat a number the squash subject already carries', () => {
     assert.strictEqual(
-      formatCommitLine(commit({ subject: 'Add a thing (#1350)', prNumber: 1350 })),
+      formatCommitLine(
+        commit({ subject: 'Add a thing (#1350)', prNumber: 1350 }),
+      ),
       '  0e3c3fb Add a thing (#1350)',
     );
   });
 
   it('still appends when the subject mentions a different number', () => {
     assert.strictEqual(
-      formatCommitLine(commit({ subject: 'Follow-up to #1347', prNumber: 1350 })),
+      formatCommitLine(
+        commit({ subject: 'Follow-up to #1347', prNumber: 1350 }),
+      ),
       '  0e3c3fb Follow-up to #1347 (#1350)',
     );
   });
@@ -60,8 +69,14 @@ describe('buildEditorContent', () => {
 
   it('lists each omitted change with its reason, one comment per line', () => {
     const content = buildEditorContent(entry, [
-      { commit: commit({ subject: 'Bump CI action', prNumber: 7 }), reason: 'CI only' },
-      { commit: commit({ subject: 'Retry stalled uploads', prNumber: 8 }), reason: null },
+      {
+        commit: commit({ subject: 'Bump CI action', prNumber: 7 }),
+        reason: 'CI only',
+      },
+      {
+        commit: commit({ subject: 'Retry stalled uploads', prNumber: 8 }),
+        reason: null,
+      },
     ]);
     assert.strictEqual(
       content,
@@ -89,20 +104,34 @@ describe('buildEditorContent', () => {
 
 describe('stripEditorComments', () => {
   const omitted = [
-    { commit: commit({ subject: 'Bump CI action', prNumber: 7 }), reason: 'CI only' },
-    { commit: commit({ subject: 'Retry stalled uploads', prNumber: 8 }), reason: null },
+    {
+      commit: commit({ subject: 'Bump CI action', prNumber: 7 }),
+      reason: 'CI only',
+    },
+    {
+      commit: commit({ subject: 'Retry stalled uploads', prNumber: 8 }),
+      reason: null,
+    },
   ];
 
   it('round-trips to just the entry', () => {
     const content = buildEditorContent('## 1.2.0\n\n- Add a thing\n', omitted);
-    assert.strictEqual(stripEditorComments(content), '## 1.2.0\n\n- Add a thing');
+    assert.strictEqual(
+      stripEditorComments(content),
+      '## 1.2.0\n\n- Add a thing',
+    );
   });
 
   it('keeps a change promoted into the notes and drops the comments around it', () => {
-    const lines = buildEditorContent('## 1.2.0\n\n- Add a thing\n', omitted).split('\n');
+    const lines = buildEditorContent(
+      '## 1.2.0\n\n- Add a thing\n',
+      omitted,
+    ).split('\n');
     // Turn the last omitted change into a bullet point in place, the way
     // someone would in the editor.
-    const idx = lines.findIndex(line => line.includes('Retry stalled uploads'));
+    const idx = lines.findIndex((line) =>
+      line.includes('Retry stalled uploads'),
+    );
     lines[idx] = '- Retry stalled uploads';
     assert.strictEqual(
       stripEditorComments(lines.join('\n')),
@@ -113,13 +142,17 @@ describe('stripEditorComments', () => {
   it('drops the remaining comments when some of them were deleted', () => {
     const content = buildEditorContent('## 1.2.0\n\n- Add a thing\n', omitted)
       .split('\n')
-      .filter(line => !line.includes('are discarded when the editor closes'))
+      .filter((line) => !line.includes('are discarded when the editor closes'))
       .join('\n');
-    assert.strictEqual(stripEditorComments(content), '## 1.2.0\n\n- Add a thing');
+    assert.strictEqual(
+      stripEditorComments(content),
+      '## 1.2.0\n\n- Add a thing',
+    );
   });
 
   it('keeps an HTML comment and an indented // in a code sample', () => {
-    const entry = '## 1.2.0\n\n- Add a thing:\n\n  ```js\n  // set this\n  ```\n<!-- note -->';
+    const entry =
+      '## 1.2.0\n\n- Add a thing:\n\n  ```js\n  // set this\n  ```\n<!-- note -->';
     assert.strictEqual(stripEditorComments(entry), entry);
   });
 

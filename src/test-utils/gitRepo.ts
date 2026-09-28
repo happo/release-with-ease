@@ -31,7 +31,9 @@ function git(args: Array<string>, cwd: string = tmpfs.fullPath(WORK)): string {
     },
   });
   if (result.status !== 0) {
-    throw new Error(`git ${args.join(' ')} failed:\n${result.stdout}\n${result.stderr}`);
+    throw new Error(
+      `git ${args.join(' ')} failed:\n${result.stdout}\n${result.stderr}`,
+    );
   }
   return result.stdout;
 }
@@ -65,7 +67,7 @@ export function initRepo(): Repo {
 
   const repo: Repo = {
     git: (...args) => git(args),
-    sha: rev => git(['rev-parse', rev]).trim(),
+    sha: (rev) => git(['rev-parse', rev]).trim(),
     commit: (files, message) => {
       for (const [name, content] of Object.entries(files)) {
         tmpfs.writeFile(path.join(WORK, name), content);

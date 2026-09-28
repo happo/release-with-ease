@@ -8,18 +8,23 @@ const LOCKFILES = ['package-lock.json', 'npm-shrinkwrap.json'];
  * endings and trailing newline it already had, so that the diff is the
  * changed value and nothing else.
  */
-function rewriteJson(file: string, update: (data: Record<string, unknown>) => void): void {
+function rewriteJson(
+  file: string,
+  update: (data: Record<string, unknown>) => void,
+): void {
   const raw = fs.readFileSync(file, 'utf8');
   const data = JSON.parse(raw) as Record<string, unknown>;
   update(data);
 
   const multiline = /\n/.test(raw.trim());
-  const indent = multiline ? (raw.match(/^[{[][ \t]*\r?\n([ \t]+)/)?.[1] ?? '  ') : '';
+  const indent = multiline
+    ? (raw.match(/^[{[][ \t]*\r?\n([ \t]+)/)?.[1] ?? '  ')
+    : '';
   const eol = raw.includes('\r\n') ? '\r\n' : '\n';
   let out = JSON.stringify(data, null, indent);
   // Newlines inside string values are escaped by JSON.stringify, so every
   // literal one left in the output is formatting.
-  if (eol !== '\n') out = out.replace(/\n/g, eol);
+  if (eol !== '\n') out = out.replaceAll('\n', eol);
   if (/\n$/.test(raw)) out += eol;
   fs.writeFileSync(file, out);
 }
@@ -51,7 +56,8 @@ function workspaceLockfile(dir: string): { file: string; key: string } | null {
       return null;
     }
     const parent = path.dirname(current);
-    if (parent === current || fs.existsSync(path.join(current, '.git'))) return null;
+    if (parent === current || fs.existsSync(path.join(current, '.git')))
+      return null;
     current = parent;
   }
 }
@@ -70,7 +76,7 @@ function workspaceLockfile(dir: string): { file: string; key: string } | null {
  * `preversion`/`version`/`postversion` scripts are therefore not run.
  */
 export function writeVersion(dir: string, version: string): Array<string> {
-  rewriteJson(path.join(dir, 'package.json'), data => {
+  rewriteJson(path.join(dir, 'package.json'), (data) => {
     data['version'] = version;
   });
   const changed = ['package.json'];
@@ -78,12 +84,12 @@ export function writeVersion(dir: string, version: string): Array<string> {
   for (const lockfile of LOCKFILES) {
     const file = path.join(dir, lockfile);
     if (!fs.existsSync(file)) continue;
-    rewriteJson(file, data => {
+    rewriteJson(file, (data) => {
       data['version'] = version;
       // lockfileVersion 2 and 3 repeat the root package's version here.
-      const root = (data['packages'] as Record<string, Record<string, unknown>> | undefined)?.[
-        ''
-      ];
+      const root = (
+        data['packages'] as Record<string, Record<string, unknown>> | undefined
+      )?.[''];
       if (root) root['version'] = version;
     });
     changed.push(lockfile);
@@ -92,10 +98,10 @@ export function writeVersion(dir: string, version: string): Array<string> {
   if (changed.length === 1) {
     const workspace = workspaceLockfile(dir);
     if (workspace) {
-      rewriteJson(workspace.file, data => {
-        const entry = (data['packages'] as Record<string, Record<string, unknown>>)[
-          workspace.key
-        ];
+      rewriteJson(workspace.file, (data) => {
+        const entry = (
+          data['packages'] as Record<string, Record<string, unknown>>
+        )[workspace.key];
         if (entry) entry['version'] = version;
       });
       changed.push(path.relative(dir, workspace.file));

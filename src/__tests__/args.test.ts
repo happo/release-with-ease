@@ -1,19 +1,24 @@
 import assert from 'node:assert';
+
 import { afterEach, describe, it } from 'vitest';
 
 import {
   configuredPaths,
   configuredTagPrefix,
   parseArgs,
-  UsageError,
   unscopedSubdirectoryWarning,
+  UsageError,
 } from '../args.ts';
 import { initRepo } from '../test-utils/gitRepo.ts';
 import * as tmpfs from '../test-utils/tmpfs.ts';
 
 describe('parseArgs', () => {
   it('defaults to a whole-repository release', () => {
-    assert.deepStrictEqual(parseArgs([]), { dryRun: false, paths: [], packageName: null });
+    assert.deepStrictEqual(parseArgs([]), {
+      dryRun: false,
+      paths: [],
+      packageName: null,
+    });
   });
 
   it('recognizes --dry-run', () => {
@@ -21,11 +26,15 @@ describe('parseArgs', () => {
   });
 
   it('takes a path as a separate argument', () => {
-    assert.deepStrictEqual(parseArgs(['--path', 'packages/cli']).paths, ['packages/cli']);
+    assert.deepStrictEqual(parseArgs(['--path', 'packages/cli']).paths, [
+      'packages/cli',
+    ]);
   });
 
   it('takes a path with =', () => {
-    assert.deepStrictEqual(parseArgs(['--path=packages/cli']).paths, ['packages/cli']);
+    assert.deepStrictEqual(parseArgs(['--path=packages/cli']).paths, [
+      'packages/cli',
+    ]);
   });
 
   it('accepts --pathspec as a synonym', () => {
@@ -94,7 +103,10 @@ describe('parseArgs', () => {
 describe('configuredTagPrefix', () => {
   it('is v when nothing is configured', () => {
     assert.strictEqual(configuredTagPrefix({}), 'v');
-    assert.strictEqual(configuredTagPrefix({ 'release-with-ease': { paths: ['.'] } }), 'v');
+    assert.strictEqual(
+      configuredTagPrefix({ 'release-with-ease': { paths: ['.'] } }),
+      'v',
+    );
   });
 
   it('reads a configured prefix', () => {
@@ -106,7 +118,9 @@ describe('configuredTagPrefix', () => {
 
   it('accepts a scoped package name', () => {
     assert.strictEqual(
-      configuredTagPrefix({ 'release-with-ease': { tagPrefix: '@happo/cli@' } }),
+      configuredTagPrefix({
+        'release-with-ease': { tagPrefix: '@happo/cli@' },
+      }),
       '@happo/cli@',
     );
   });
@@ -120,17 +134,30 @@ describe('configuredTagPrefix', () => {
 
   it('refuses a prefix that is not a string', () => {
     assert.throws(
-      () => configuredTagPrefix({ 'release-with-ease': { tagPrefix: true } } as never),
+      () =>
+        configuredTagPrefix({
+          'release-with-ease': { tagPrefix: true },
+        } as never),
       UsageError,
     );
   });
 
   // Each of these makes an invalid ref, would be read as a pattern by
   // `git describe --match`, or (a leading dash) as an option by `git tag`.
-  for (const prefix of ['server:', 'my server@', 'server*', 'server?', 'server[', 'a..b@', '@{', '-rc@']) {
+  for (const prefix of [
+    'server:',
+    'my server@',
+    'server*',
+    'server?',
+    'server[',
+    'a..b@',
+    '@{',
+    '-rc@',
+  ]) {
     it(`refuses ${JSON.stringify(prefix)}`, () => {
       assert.throws(
-        () => configuredTagPrefix({ 'release-with-ease': { tagPrefix: prefix } }),
+        () =>
+          configuredTagPrefix({ 'release-with-ease': { tagPrefix: prefix } }),
         /does not make a valid git tag/,
       );
     });
@@ -144,7 +171,10 @@ describe('configuredPaths', () => {
   });
 
   it('accepts a single path string', () => {
-    assert.deepStrictEqual(configuredPaths({ 'release-with-ease': { paths: '.' } }), ['.']);
+    assert.deepStrictEqual(
+      configuredPaths({ 'release-with-ease': { paths: '.' } }),
+      ['.'],
+    );
   });
 
   it('accepts an array', () => {
@@ -155,7 +185,10 @@ describe('configuredPaths', () => {
   });
 
   it('accepts the singular "path" key', () => {
-    assert.deepStrictEqual(configuredPaths({ 'release-with-ease': { path: 'a' } }), ['a']);
+    assert.deepStrictEqual(
+      configuredPaths({ 'release-with-ease': { path: 'a' } }),
+      ['a'],
+    );
   });
 
   it('prefers "paths" when both are given', () => {
@@ -166,9 +199,10 @@ describe('configuredPaths', () => {
   });
 
   it('trims surrounding whitespace', () => {
-    assert.deepStrictEqual(configuredPaths({ 'release-with-ease': { paths: '  a  ' } }), [
-      'a',
-    ]);
+    assert.deepStrictEqual(
+      configuredPaths({ 'release-with-ease': { paths: '  a  ' } }),
+      ['a'],
+    );
   });
 
   it('refuses an empty array', () => {
@@ -179,7 +213,10 @@ describe('configuredPaths', () => {
   });
 
   it('refuses a blank entry rather than releasing everything', () => {
-    assert.throws(() => configuredPaths({ 'release-with-ease': { paths: ['a', '  '] } }), UsageError);
+    assert.throws(
+      () => configuredPaths({ 'release-with-ease': { paths: ['a', '  '] } }),
+      UsageError,
+    );
   });
 
   it('refuses a non-string entry', () => {
@@ -198,7 +235,10 @@ describe('unscopedSubdirectoryWarning', () => {
   it('says nothing when paths are already set', () => {
     tmpfs.mock({});
     initRepo();
-    assert.strictEqual(unscopedSubdirectoryWarning(['.'], { name: 'pkg' }), null);
+    assert.strictEqual(
+      unscopedSubdirectoryWarning(['.'], { name: 'pkg' }),
+      null,
+    );
   });
 
   it('says nothing at the repository root', () => {
@@ -229,6 +269,9 @@ describe('unscopedSubdirectoryWarning', () => {
     repo.commit({ 'packages/cli/package.json': '{}' }, 'Add a package');
     process.chdir(tmpfs.fullPath('work/packages/cli'));
 
-    assert.match(unscopedSubdirectoryWarning([], {}) ?? '', /This package lives in a subdirectory/);
+    assert.match(
+      unscopedSubdirectoryWarning([], {}) ?? '',
+      /This package lives in a subdirectory/,
+    );
   });
 });

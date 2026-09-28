@@ -7,7 +7,11 @@ export function isBump(value: string): value is Bump {
 }
 
 export function bumpVersionString(cur: string, bump: Bump): string {
-  const [maj, min, pat] = cur.split('.').map(n => parseInt(n, 10));
+  // parseInt rather than Number: it reads the leading digits of a part such
+  // as `3-beta` in `1.2.3-beta.1`, where Number would give NaN and reject the
+  // version.
+  // eslint-disable-next-line unicorn/prefer-number-coercion
+  const [maj, min, pat] = cur.split('.').map((n) => parseInt(n, 10));
   if (
     maj === undefined ||
     min === undefined ||

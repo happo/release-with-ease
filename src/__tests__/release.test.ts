@@ -2,9 +2,10 @@ import assert from 'node:assert';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { AddressInfo } from 'node:net';
+
 import { afterEach, describe, it } from 'vitest';
 
 import * as fakeGh from '../test-utils/fakeGh.ts';
@@ -18,23 +19,31 @@ import * as tmpfs from '../test-utils/tmpfs.ts';
  * so that the answer to its one prompt can be typed into its stdin; git is
  * real, `gh` is the fake on PATH, and Claude is an HTTP server on localhost.
  */
-const MAIN = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'main.ts');
+const MAIN = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+  'main.ts',
+);
 
 let server: http.Server | undefined;
 
 afterEach(async () => {
   fakeGh.restore();
   tmpfs.restore();
-  await new Promise<void>(resolve => (server ? server.close(() => resolve()) : resolve()));
+  await new Promise<void>((resolve) =>
+    server ? server.close(() => resolve()) : resolve(),
+  );
   server = undefined;
 });
 
 /** Answers every request with `suggestion`, and records what was asked. */
-async function fakeClaude(suggestion: unknown): Promise<{ url: string; asked: Array<string> }> {
+async function fakeClaude(
+  suggestion: unknown,
+): Promise<{ url: string; asked: Array<string> }> {
   const asked: Array<string> = [];
   server = http.createServer((req, res) => {
     let body = '';
-    req.on('data', chunk => (body += chunk));
+    req.on('data', (chunk) => (body += chunk));
     req.on('end', () => {
       asked.push(JSON.parse(body).messages[0].content);
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -51,7 +60,7 @@ async function fakeClaude(suggestion: unknown): Promise<{ url: string; asked: Ar
       );
     });
   });
-  await new Promise<void>(resolve => server?.listen(0, '127.0.0.1', resolve));
+  await new Promise<void>((resolve) => server?.listen(0, '127.0.0.1', resolve));
   const { port } = server.address() as AddressInfo;
   return { url: `http://127.0.0.1:${port}`, asked };
 }
@@ -78,10 +87,10 @@ function runCli(
     );
     let stdout = '';
     let stderr = '';
-    child.stdout.on('data', chunk => (stdout += chunk));
-    child.stderr.on('data', chunk => (stderr += chunk));
+    child.stdout.on('data', (chunk) => (stdout += chunk));
+    child.stderr.on('data', (chunk) => (stderr += chunk));
     child.on('error', reject);
-    child.on('close', code => resolve({ code, stdout, stderr }));
+    child.on('close', (code) => resolve({ code, stdout, stderr }));
     child.stdin.end(input);
   });
 }
@@ -92,34 +101,41 @@ describe('releasing one package of a monorepo from its root', () => {
     const repo = initRepo();
     repo.commit(
       {
-        'package.json': JSON.stringify({ name: 'root', private: true }, null, 2) + '\n',
-        'projects/server/package.json':
-          JSON.stringify(
-            {
-              name: 'server',
-              version: '1.0.0',
-              private: true,
-              'release-with-ease': { paths: ['.'], tagPrefix: 'server@' },
-            },
-            null,
-            2,
-          ) + '\n',
-        'projects/server/README.md': '# server\n\n# Changelog\n\n## 1.0.0\n\n- First\n',
-        'projects/worker/package.json':
-          JSON.stringify({ name: 'worker', version: '3.0.0', private: true }, null, 2) + '\n',
+        'package.json': `${JSON.stringify({ name: 'root', private: true }, null, 2)}\n`,
+        'projects/server/package.json': `${JSON.stringify(
+          {
+            name: 'server',
+            version: '1.0.0',
+            private: true,
+            'release-with-ease': { paths: ['.'], tagPrefix: 'server@' },
+          },
+          null,
+          2,
+        )}\n`,
+        'projects/server/README.md':
+          '# server\n\n# Changelog\n\n## 1.0.0\n\n- First\n',
+        'projects/worker/package.json': `${JSON.stringify({ name: 'worker', version: '3.0.0', private: true }, null, 2)}\n`,
       },
       'Add projects',
     );
     // The repository used plain v tags until now.
     repo.git('tag', '-m', '1.0.0', 'v1.0.0');
-    repo.commit({ 'projects/server/index.js': 'server' }, 'Teach the server a trick');
-    repo.commit({ 'projects/worker/index.js': 'worker' }, 'Teach the worker a trick');
+    repo.commit(
+      { 'projects/server/index.js': 'server' },
+      'Teach the server a trick',
+    );
+    repo.commit(
+      { 'projects/worker/index.js': 'worker' },
+      'Teach the worker a trick',
+    );
     repo.publish();
     repo.git('push', 'origin', 'v1.0.0');
     repo.git('tag', 'stray-local-tag');
     const before = repo.sha('HEAD');
 
-    fakeGh.install({ releaseUrl: 'https://github.com/o/r/releases/tag/server%401.1.0' });
+    fakeGh.install({
+      releaseUrl: 'https://github.com/o/r/releases/tag/server%401.1.0',
+    });
     const claude = await fakeClaude({
       bump: 'minor',
       reasoning: 'A new trick.',
@@ -141,7 +157,10 @@ describe('releasing one package of a monorepo from its root', () => {
 
     // package.json was edited in place, and only the server's files changed.
     const pkg = JSON.parse(
-      fs.readFileSync(tmpfs.fullPath('work/projects/server/package.json'), 'utf8'),
+      fs.readFileSync(
+        tmpfs.fullPath('work/projects/server/package.json'),
+        'utf8',
+      ),
     );
     assert.strictEqual(pkg.version, '1.1.0');
     assert.match(
@@ -158,7 +177,9 @@ describe('releasing one package of a monorepo from its root', () => {
     );
 
     // The tag went out with the branch; nothing else did.
-    const remoteTags = repo.git('ls-remote', '--tags', '--refs', 'origin').trim();
+    const remoteTags = repo
+      .git('ls-remote', '--tags', '--refs', 'origin')
+      .trim();
     assert.match(remoteTags, /refs\/tags\/server@1\.1\.0$/m);
     assert.doesNotMatch(remoteTags, /v1\.1\.0|stray-local-tag/);
     assert.strictEqual(repo.sha('origin/main'), repo.sha('HEAD'));
@@ -179,8 +200,7 @@ describe('releasing one package of a monorepo from its root', () => {
     const repo = initRepo();
     repo.commit(
       {
-        'package.json':
-          JSON.stringify({ name: 'solo', version: '2.7.2', private: true }, null, 2) + '\n',
+        'package.json': `${JSON.stringify({ name: 'solo', version: '2.7.2', private: true }, null, 2)}\n`,
       },
       'Add package',
     );
@@ -189,8 +209,14 @@ describe('releasing one package of a monorepo from its root', () => {
     repo.publish();
     repo.git('push', 'origin', 'v2.7.2');
 
-    fakeGh.install({ releaseUrl: 'https://github.com/o/r/releases/tag/v2.7.3' });
-    const claude = await fakeClaude({ bump: 'patch', reasoning: 'A fix.', notes: ['Fix a bug'] });
+    fakeGh.install({
+      releaseUrl: 'https://github.com/o/r/releases/tag/v2.7.3',
+    });
+    const claude = await fakeClaude({
+      bump: 'patch',
+      reasoning: 'A fix.',
+      notes: ['Fix a bug'],
+    });
 
     const result = await runCli(
       [],
@@ -200,7 +226,10 @@ describe('releasing one package of a monorepo from its root', () => {
     assert.strictEqual(result.code, 0, `${result.stdout}\n${result.stderr}`);
 
     assert.strictEqual(repo.git('log', '-1', '--format=%s').trim(), '2.7.3');
-    assert.match(repo.git('ls-remote', '--tags', '--refs', 'origin'), /refs\/tags\/v2\.7\.3$/m);
+    assert.match(
+      repo.git('ls-remote', '--tags', '--refs', 'origin'),
+      /refs\/tags\/v2\.7\.3$/m,
+    );
     assert.deepStrictEqual(fakeGh.releaseCreateArgs()?.slice(0, 5), [
       'release',
       'create',
@@ -214,7 +243,13 @@ describe('releasing one package of a monorepo from its root', () => {
     tmpfs.mock({});
     const repo = initRepo();
     repo.commit(
-      { 'package.json': JSON.stringify({ name: 'pkg', version: '1.0.0', private: true }) },
+      {
+        'package.json': JSON.stringify({
+          name: 'pkg',
+          version: '1.0.0',
+          private: true,
+        }),
+      },
       'Add package',
     );
     repo.publish();
@@ -222,7 +257,11 @@ describe('releasing one package of a monorepo from its root', () => {
     const before = repo.sha('HEAD');
 
     fakeGh.install({ releaseUrl: 'unused' });
-    const claude = await fakeClaude({ bump: 'patch', reasoning: 'A fix.', notes: ['Fix'] });
+    const claude = await fakeClaude({
+      bump: 'patch',
+      reasoning: 'A fix.',
+      notes: ['Fix'],
+    });
 
     const result = await runCli(
       [],
@@ -240,17 +279,16 @@ describe('releasing one package of a monorepo from its root', () => {
     const repo = initRepo();
     repo.commit(
       {
-        'package.json':
-          JSON.stringify(
-            {
-              name: 'pkg',
-              version: '1.0.0',
-              private: true,
-              'release-with-ease': { tagPrefix: 'pkg@' },
-            },
-            null,
-            2,
-          ) + '\n',
+        'package.json': `${JSON.stringify(
+          {
+            name: 'pkg',
+            version: '1.0.0',
+            private: true,
+            'release-with-ease': { tagPrefix: 'pkg@' },
+          },
+          null,
+          2,
+        )}\n`,
       },
       'Add package',
     );
@@ -263,7 +301,11 @@ describe('releasing one package of a monorepo from its root', () => {
     const before = repo.sha('HEAD');
 
     fakeGh.install({ releaseUrl: 'unused' });
-    const claude = await fakeClaude({ bump: 'patch', reasoning: 'A fix.', notes: ['Fix a bug'] });
+    const claude = await fakeClaude({
+      bump: 'patch',
+      reasoning: 'A fix.',
+      notes: ['Fix a bug'],
+    });
 
     const result = await runCli(
       [],
