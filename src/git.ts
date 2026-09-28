@@ -1,4 +1,5 @@
-import { safeRun } from './exec.ts';
+import { run, safeRun } from './exec.ts';
+import { DEFAULT_TAG_PREFIX, type ReleaseName } from './tags.ts';
 
 export interface Commit {
   hash: string;
@@ -101,10 +102,68 @@ export function preflightChecks(): { defaultBranch: string } {
   return { defaultBranch };
 }
 
-export function getLastVersionTag(): string | null {
-  const res = safeRun('git describe --tags --match "v[0-9]*.[0-9]*.[0-9]*" --abbrev=0');
+export function getLastVersionTag(prefix: string = DEFAULT_TAG_PREFIX): string | null {
+  const pattern = shellQuote(`${prefix}[0-9]*.[0-9]*.[0-9]*`);
+  const res = safeRun(`git describe --tags --match ${pattern} --abbrev=0`);
   if (res.ok) return res.out.trim();
   return null;
+}
+
+export function tagExists(tag: string): boolean {
+  return safeRun(`git rev-parse --quiet --verify ${shellQuote(`refs/tags/${tag}`)}`).ok;
+}
+
+export interface LastRelease {
+  tag: string | null;
+  /**
+   * Whether the tag was found under the default `v` prefix rather than the
+   * configured one, which is what happens on the first release after a
+   * package switches to a prefix of its own.
+   */
+  fromDefaultPrefix: boolean;
+}
+
+/**
+ * The tag of the last release, under the configured prefix. A package that
+ * has just moved to a prefix of its own has no tags under it yet, and falling
+ * back to "the last 100 commits" would write its first prefixed release notes
+ * from far too much history — so in that case the `v` tag for the current
+ * version in package.json stands in for the prefixed one. Only that exact tag: a nearer `v`
+ * tag could just as well belong to another package in the same repository.
+ * And only if HEAD descends from it, since a tag on a branch that never
+ * merged would make `<tag>..HEAD` the whole mainline.
+ */
+export function getLastReleaseTag(prefix: string, currentVersion: string | undefined): LastRelease {
+  const tag = getLastVersionTag(prefix);
+  if (tag || prefix === DEFAULT_TAG_PREFIX || !currentVersion) {
+    return { tag, fromDefaultPrefix: false };
+  }
+  const legacy = `${DEFAULT_TAG_PREFIX}${currentVersion}`;
+  if (tagExists(legacy) && safeRun(`git merge-base --is-ancestor ${shellQuote(legacy)} HEAD`).ok) {
+    return { tag: legacy, fromDefaultPrefix: true };
+  }
+  return { tag: null, fromDefaultPrefix: false };
+}
+
+/**
+ * Commits the given files — the package's own, relative to the current
+ * directory — and tags that commit. Nothing else is staged: the preflight
+ * checks refused a dirty working tree, so the commit holds exactly what the
+ * release changed.
+ */
+export function commitAndTagRelease(release: ReleaseName, files: ReadonlyArray<string>): void {
+  run(`git add -- ${files.map(shellQuote).join(' ')}`);
+  run(`git commit -m ${shellQuote(release.label)}`);
+  run(`git tag -m ${shellQuote(release.label)} ${shellQuote(release.tag)}`);
+}
+
+/**
+ * Pushes the branch and the one tag this release made. Not `--tags`: in a
+ * repository several packages release from, whatever other tags happen to be
+ * lying around locally have no business going out with this one.
+ */
+export function pushRelease(branch: string, release: ReleaseName): void {
+  run(`git push origin ${shellQuote(branch)} ${shellQuote(`refs/tags/${release.tag}`)}`);
 }
 
 /**
@@ -146,7 +205,7 @@ export function getCommitRange(
   // commit — the same one entry per PR the range above produces.
   if (lastTag) {
     const res = safeRun(
-      `git log --first-parent ${lastTag}..HEAD --pretty=format:%H%x1f%s%x1f%b%x1e${pathspec}`,
+      `git log --first-parent ${shellQuote(`${lastTag}..HEAD`)} --pretty=format:%H%x1f%s%x1f%b%x1e${pathspec}`,
     );
     return res.ok ? res.out : '';
   }

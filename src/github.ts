@@ -1,5 +1,5 @@
 import { safeRun } from './exec.ts';
-import { pathspecSuffix, type Commit } from './git.ts';
+import { pathspecSuffix, shellQuote, type Commit } from './git.ts';
 
 export interface PullRequest {
   number: number;
@@ -15,6 +15,15 @@ export interface PullRequest {
 export interface CommitWithMeta extends Commit {
   githubLogin: string | null;
   prNumber: number | null;
+}
+
+/**
+ * A ref as it goes into an API path. Ref names may hold `#`, `%` and other
+ * characters a URL gives a meaning to, so each part is percent-encoded; the
+ * slashes between parts stay, as GitHub reads them in a ref.
+ */
+export function encodeRef(ref: string): string {
+  return ref.split('/').map(encodeURIComponent).join('/');
 }
 
 export function extractPrNumber(subject: string, body: string): number | null {
@@ -197,7 +206,7 @@ export function fetchGitHubMeta(
   const shaToLogin: Record<string, string> = {};
   if (lastTag) {
     const cmpRes = safeRun(
-      `gh api "repos/${owner}/${repo}/compare/${lastTag}...HEAD" --jq '.commits[] | [.sha, (.author.login // "")] | @tsv'`,
+      `gh api ${shellQuote(`repos/${owner}/${repo}/compare/${encodeRef(lastTag)}...HEAD`)} --jq '.commits[] | [.sha, (.author.login // "")] | @tsv'`,
     );
     if (cmpRes.ok) {
       for (const line of cmpRes.out.trim().split('\n').filter(Boolean)) {

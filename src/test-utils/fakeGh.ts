@@ -22,6 +22,11 @@ export interface FakeGhOptions {
   prList?: unknown;
   /** Value for `gh repo view --json defaultBranchRef`. */
   defaultBranch?: string;
+  /**
+   * Makes `gh release create` succeed, printing this URL. Its arguments are
+   * recorded, one per line, for `releaseCreateArgs()`.
+   */
+  releaseUrl?: string;
 }
 
 let originalPath: string | undefined;
@@ -49,6 +54,9 @@ export function install(options: FakeGhOptions = {}): void {
   if (options.compare !== undefined) {
     write('compare', options.compare.map(row => row.join('\t')).join('\n') + '\n');
   }
+  if (options.releaseUrl !== undefined) {
+    write('releaseUrl', `${options.releaseUrl}\n`);
+  }
   if (options.prList !== undefined) {
     write(
       'prList',
@@ -66,6 +74,9 @@ case "$*" in
   *"repo view"*) exec cat ${JSON.stringify(path.join(dataDir, 'nameWithOwner'))} ;;
   *"pr list"*) exec cat ${JSON.stringify(path.join(dataDir, 'prList'))} ;;
   *api*compare*) exec cat ${JSON.stringify(path.join(dataDir, 'compare'))} ;;
+  "release create"*)
+    printf '%s\n' "$@" > ${JSON.stringify(path.join(dataDir, 'releaseCreateArgs'))}
+    exec cat ${JSON.stringify(path.join(dataDir, 'releaseUrl'))} ;;
 esac
 echo "fake gh: unhandled invocation: $*" >&2
 exit 1
@@ -76,6 +87,13 @@ exit 1
 
   originalPath = process.env['PATH'];
   process.env['PATH'] = `${binDir}${path.delimiter}${originalPath ?? ''}`;
+}
+
+/** The arguments the last `gh release create` was called with, or null. */
+export function releaseCreateArgs(): Array<string> | null {
+  const file = tmpfs.fullPath('fake-bin-data', 'releaseCreateArgs');
+  if (!fs.existsSync(file)) return null;
+  return fs.readFileSync(file, 'utf8').split('\n').slice(0, -1);
 }
 
 export function restore(): void {

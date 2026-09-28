@@ -3,15 +3,20 @@ import { execSync } from 'node:child_process';
 import { afterEach, describe, it } from 'vitest';
 
 import {
+  commitAndTagRelease,
   getCommitRange,
   getCurrentBranch,
   getDefaultBranch,
+  getLastReleaseTag,
   getLastVersionTag,
   parseCommits,
   pathspecSuffix,
   preflightChecks,
+  pushRelease,
   shellQuote,
+  tagExists,
 } from '../git.ts';
+import { releaseName } from '../tags.ts';
 import { initRepo, mergeTwoDeepStack } from '../test-utils/gitRepo.ts';
 import * as tmpfs from '../test-utils/tmpfs.ts';
 
@@ -141,6 +146,158 @@ describe('against a real repository', () => {
 
       assert.strictEqual(getLastVersionTag(), 'v1.0.0');
     });
+
+    it('finds only the tags under a package prefix', () => {
+      tmpfs.mock({});
+      const repo = initRepo();
+      repo.git('tag', 'server@18.19.0');
+      repo.commit({ 'a.txt': 'a' }, 'Add a');
+      repo.git('tag', 'worker@21.24.0');
+      repo.git('tag', 'server-legacy@9.0.0');
+      repo.git('tag', 'v3.0.0');
+      repo.commit({ 'b.txt': 'b' }, 'Add b');
+
+      assert.strictEqual(getLastVersionTag('server@'), 'server@18.19.0');
+      assert.strictEqual(getLastVersionTag('worker@'), 'worker@21.24.0');
+      assert.strictEqual(getLastVersionTag(), 'v3.0.0');
+      assert.strictEqual(getLastVersionTag('docs@'), null);
+    });
+
+    it('does not mistake a prefixed tag for a v tag', () => {
+      tmpfs.mock({});
+      const repo = initRepo();
+      repo.git('tag', 'vite@1.0.0');
+      assert.strictEqual(getLastVersionTag(), null);
+    });
+
+    it('finds a scoped package prefix', () => {
+      tmpfs.mock({});
+      const repo = initRepo();
+      repo.git('tag', '@happo/cli@1.2.0');
+      repo.commit({ 'a.txt': 'a' }, 'Add a');
+
+      assert.strictEqual(getLastVersionTag('@happo/cli@'), '@happo/cli@1.2.0');
+    });
+  });
+
+  describe('getLastReleaseTag', () => {
+    it('returns the prefixed tag when there is one', () => {
+      tmpfs.mock({});
+      const repo = initRepo();
+      repo.git('tag', 'v1.0.0');
+      repo.git('tag', 'pkg@1.0.0');
+
+      assert.deepStrictEqual(getLastReleaseTag('pkg@', '1.0.0'), {
+        tag: 'pkg@1.0.0',
+        fromDefaultPrefix: false,
+      });
+    });
+
+    it('starts a newly prefixed package from the v tag of its current version', () => {
+      tmpfs.mock({});
+      const repo = initRepo();
+      repo.git('tag', 'v2.7.2');
+      repo.commit({ 'a.txt': 'a' }, 'Add a');
+
+      assert.deepStrictEqual(getLastReleaseTag('pkg@', '2.7.2'), {
+        tag: 'v2.7.2',
+        fromDefaultPrefix: true,
+      });
+    });
+
+    it('does not take the v tag from a branch that never merged', () => {
+      tmpfs.mock({});
+      const repo = initRepo();
+      repo.git('checkout', '-b', 'release-branch');
+      repo.commit({ 'a.txt': 'a' }, 'Only on the release branch');
+      repo.git('tag', 'v2.7.2');
+      repo.git('checkout', 'main');
+      repo.commit({ 'b.txt': 'b' }, 'On main');
+
+      assert.deepStrictEqual(getLastReleaseTag('pkg@', '2.7.2'), {
+        tag: null,
+        fromDefaultPrefix: false,
+      });
+    });
+
+    it('does not take a v tag for some other version', () => {
+      // In a repository several packages release from, a nearby v tag says
+      // nothing about this package.
+      tmpfs.mock({});
+      const repo = initRepo();
+      repo.git('tag', 'v5.0.0');
+
+      assert.deepStrictEqual(getLastReleaseTag('pkg@', '2.7.2'), {
+        tag: null,
+        fromDefaultPrefix: false,
+      });
+    });
+
+    it('behaves as before with the default prefix', () => {
+      tmpfs.mock({});
+      const repo = initRepo();
+      repo.git('tag', 'v1.0.0');
+      assert.deepStrictEqual(getLastReleaseTag('v', '1.0.0'), {
+        tag: 'v1.0.0',
+        fromDefaultPrefix: false,
+      });
+    });
+  });
+
+  describe('tagExists', () => {
+    it('tells tags from branches and from nothing', () => {
+      tmpfs.mock({});
+      const repo = initRepo();
+      repo.git('tag', 'pkg@1.0.0');
+      repo.git('branch', 'pkg@2.0.0');
+
+      assert.strictEqual(tagExists('pkg@1.0.0'), true);
+      assert.strictEqual(tagExists('pkg@2.0.0'), false);
+      assert.strictEqual(tagExists('pkg@3.0.0'), false);
+    });
+  });
+
+  describe('commitAndTagRelease / pushRelease', () => {
+    it('commits only the files it is given and tags that commit', () => {
+      tmpfs.mock({});
+      const repo = initRepo();
+      repo.commit(
+        { 'packages/cli/package.json': '{}', 'packages/web/package.json': '{}' },
+        'Add packages',
+      );
+      process.chdir(tmpfs.fullPath('work/packages/cli'));
+      tmpfs.writeFile('work/packages/cli/package.json', '{"version":"1.0.1"}');
+
+      const release = releaseName('cli@', '1.0.1');
+      commitAndTagRelease(release, ['package.json']);
+
+      assert.strictEqual(repo.git('log', '-1', '--format=%s').trim(), 'cli@1.0.1');
+      assert.strictEqual(
+        repo.git('show', '--name-only', '--format=', 'HEAD').trim(),
+        'packages/cli/package.json',
+      );
+      assert.strictEqual(repo.sha('cli@1.0.1^{commit}'), repo.sha('HEAD'));
+      assert.strictEqual(
+        repo.git('tag', '-l', '--format=%(contents:subject)', 'cli@1.0.1').trim(),
+        'cli@1.0.1',
+      );
+    });
+
+    it('pushes the branch and its own tag, and no other local tag', () => {
+      tmpfs.mock({});
+      const repo = initRepo();
+      repo.git('tag', 'stray-local-tag');
+      repo.commit({ 'package.json': '{"version":"1.0.1"}' }, 'Bump');
+      const release = releaseName('pkg@', '1.0.1');
+      repo.git('tag', '-m', release.label, release.tag);
+
+      pushRelease('main', release);
+
+      const remoteTags = repo.git('ls-remote', '--tags', 'origin').trim();
+      assert.match(remoteTags, /refs\/tags\/pkg@1\.0\.1$/m);
+      assert.doesNotMatch(remoteTags, /stray-local-tag/);
+      assert.strictEqual(repo.sha('origin/main'), repo.sha('HEAD'));
+    });
   });
 
   describe('preflightChecks', () => {
@@ -258,6 +415,16 @@ describe('against a real repository', () => {
       assert.deepStrictEqual(subjects(getCommitRange('v1.0.0', ['packages/cli'])), [
         'Land the stack (#2)',
       ]);
+    });
+
+    it('passes a tag with shell characters in it through to git intact', () => {
+      // Valid in a ref name, so a tagPrefix can bring them in.
+      tmpfs.mock({});
+      const repo = initRepo();
+      repo.git('tag', 'a$x;b@1.0.0');
+      repo.commit({ 'a.txt': 'a' }, 'Add a');
+
+      assert.deepStrictEqual(subjects(getCommitRange('a$x;b@1.0.0')), ['Add a']);
     });
 
     it('accepts a pathspec containing a space', () => {
