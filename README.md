@@ -265,6 +265,13 @@ and the Anthropic API is a real HTTP server on localhost reached through
 
 # Changelog
 
+## 2.8.0
+
+- Implement per-package tag prefixes for monorepo releases, allowing packages to opt in with custom tag prefixes like `server@` [by @lencioni in #29]
+- Improve release notes generation to cover all user-facing changes with complete impact-sorted bullet points [by @lencioni in #27]
+- Migrate tests from node:test to Vitest for unified test runner across monorepo packages [by @lencioni in #28]
+- Update @types/node from 26.5.1 to 26.6.3 [by @app/dependabot in #24, #26]
+
 ## 2.7.2
 
 - Prevent release process from failing due to temporary API unavailability [by @Kaushik2210 in #23]
