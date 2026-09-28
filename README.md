@@ -66,6 +66,16 @@ unlike a pull request credited with files it never touched.
 The list of entries is printed before anything is sent to Claude — worth a
 glance, since it is what the release notes are written from.
 
+Claude is asked for notes that cover every user-facing change, however many
+bullet points that takes, sorted by their impact on users. Each bullet point
+names the entries it describes, so when the editor opens, comments below the
+entry list every entry no bullet point covers, with Claude's reason for leaving
+it out. Each of those lines starts with `//`, like `#` in a git commit message,
+and every line that does is dropped when the editor closes, so there is nothing
+to clean up — and turning one into a bullet point is a matter of editing that
+line. The list is worked out from which entries the notes cite, not from what
+Claude says it left out, so an entry it drops without saying so is listed too.
+
 # Monorepos
 
 By default the release notes are written from every commit on the mainline

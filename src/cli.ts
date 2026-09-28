@@ -31,7 +31,7 @@ import {
   unscopedSubdirectoryWarning,
   type PackageJson,
 } from './args.ts';
-import { askClaudeForRelease } from './claude.ts';
+import { askClaudeForRelease, type OmittedChange } from './claude.ts';
 import {
   hasReadmeChangelog,
   insertChangelogEntry,
@@ -70,6 +70,60 @@ export function formatCommitLine(commit: CommitWithMeta): string {
       ? ` (#${commit.prNumber})`
       : '';
   return `  ${shortSha} ${commit.subject}${pr}`;
+}
+
+/**
+ * Starts a line of editor-only context, the way `#` does in a git commit
+ * message. `#` itself would take the entry's `## x.y.z` heading with it.
+ */
+const EDITOR_COMMENT_PREFIX = '//';
+
+function editorComment(text: string): string {
+  return `${EDITOR_COMMENT_PREFIX} ${text}`;
+}
+
+/**
+ * What the editor opens with: the entry to publish, then the changes no
+ * bullet point covers, so a change left out is a line to read rather than
+ * something to notice missing. Each line of that context is a comment of its
+ * own and is dropped on its own, so deleting or moving some of them can't
+ * leave the rest behind in the release notes, and turning one into a bullet
+ * point is a matter of editing that line.
+ */
+export function buildEditorContent(
+  entry: string,
+  omitted: ReadonlyArray<OmittedChange>,
+): string {
+  const context = omitted.length
+    ? [
+        'Not covered by any bullet point above; add any that users should hear about:',
+        ...omitted.map(
+          ({ commit, reason }) => `${formatCommitLine(commit)}: ${reason ?? '(no reason given)'}`,
+        ),
+      ]
+    : ['Every change in this release is covered by a bullet point above.'];
+  return [
+    entry.trimEnd(),
+    '',
+    editorComment(
+      `Lines starting with ${EDITOR_COMMENT_PREFIX} are discarded when the editor closes.`,
+    ),
+    ...context.map(editorComment),
+    '',
+  ].join('\n');
+}
+
+/**
+ * The entry as edited, without the editor-only context: every line that starts
+ * with the comment prefix. Only at the very start of a line, so an indented
+ * `//` in a code sample stays.
+ */
+export function stripEditorComments(content: string): string {
+  return content
+    .split('\n')
+    .filter(line => !line.startsWith(EDITOR_COMMENT_PREFIX))
+    .join('\n')
+    .trim();
 }
 
 export async function main(argv: ReadonlyArray<string>): Promise<void> {
@@ -162,7 +216,7 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
     throw new Error('Claude did not return a release suggestion.');
   }
 
-  const { bump, reasoning, notes } = result;
+  const { bump, reasoning, notes, omitted } = result;
 
   console.log(`\nSuggested version bump: ${bump}\n`);
   console.log(`Reasoning:\n\n${reasoning}\n`);
@@ -197,7 +251,7 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
   const randomName = `changelog-entry-${crypto.randomBytes(8).toString('hex')}.tmp`;
   const tempEntryPath = path.join(os.tmpdir(), randomName);
   const entryContent = [`## ${newVersion}`, '', ...notes, ''].join('\n');
-  fs.writeFileSync(tempEntryPath, entryContent);
+  fs.writeFileSync(tempEntryPath, buildEditorContent(entryContent, omitted));
 
   console.log(`\n📝 Opening editor to review changelog entry for ${newVersion}...`);
   console.log('   Edit the changelog entry as needed, then save and close the editor.');
@@ -254,12 +308,12 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
   }
 
   // Read the edited entry
-  const editedEntry = fs.readFileSync(tempEntryPath, 'utf8');
+  const editedEntry = stripEditorComments(fs.readFileSync(tempEntryPath, 'utf8'));
 
   if (useReadmeChangelog) {
     // Insert changelog entry into README.md
     const readme = fs.readFileSync(readmePath(), 'utf8');
-    const updatedReadme = insertChangelogEntry(readme, editedEntry.trim().split('\n'));
+    const updatedReadme = insertChangelogEntry(readme, editedEntry.split('\n'));
     fs.writeFileSync(readmePath(), updatedReadme);
 
     run('git add README.md');
@@ -276,7 +330,7 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
     os.tmpdir(),
     `release-notes-${crypto.randomBytes(8).toString('hex')}.md`,
   );
-  fs.writeFileSync(ghNotesFile, editedEntry.trim());
+  fs.writeFileSync(ghNotesFile, editedEntry);
   try {
     const releaseUrl = run(
       `gh release create ${shellQuote(release.tag)} --title ${shellQuote(release.title)} --notes-file ${shellQuote(ghNotesFile)}`,
