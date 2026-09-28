@@ -5,7 +5,7 @@ A CLI (`npx release-with-ease`) that bumps an npm package's version, asks Claude
 ## Layout
 
 - `src/` — TypeScript sources. `main.ts` is the entry point; `cli.ts` runs the release flow and the other modules are the pieces it calls (`args`, `git`, `github` via the `gh` CLI, `claude` via the Anthropic HTTP API, `npm`, `packageJson`, `changelog`, `tags`, `version`, `workspace`, `exec`, `prompt`).
-- `src/__tests__/*.test.ts` — Vitest tests, one file per module plus `release.test.ts` for the end-to-end flow.
+- `src/__tests__/*.test.ts` — Vitest tests, named after the module they cover, plus `release.test.ts` for the end-to-end flow.
 - `src/test-utils/` — test helpers: `tmpfs` (temp directory + chdir), `gitRepo` (real git repos with an `origin`), `fakeGh` (a fake `gh` on `PATH`).
 - `bin/release-with-ease.js` — the published shim; it only imports `dist/main.js`.
 - `dist/` — compiled output from `pnpm build` (gitignored, published to npm).
