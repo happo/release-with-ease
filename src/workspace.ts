@@ -14,7 +14,10 @@ import { shellQuote } from './git.ts';
  * Names are looked up among the `package.json` files git tracks, which covers
  * any workspace tool's layout and leaves `node_modules` out without trying.
  */
-export function resolvePackageDir(nameOrDir: string, cwd: string = process.cwd()): string {
+export function resolvePackageDir(
+  nameOrDir: string,
+  cwd: string = process.cwd(),
+): string {
   const asDir = path.resolve(cwd, nameOrDir);
   if (fs.existsSync(path.join(asDir, 'package.json'))) return asDir;
 
@@ -29,9 +32,12 @@ export function resolvePackageDir(nameOrDir: string, cwd: string = process.cwd()
   }
   const root = path.resolve(cwd, rootRes.out.trim());
 
-  const listRes = safeRun(`git ls-files -z -- ${shellQuote(':(glob)**/package.json')}`, {
-    cwd: root,
-  });
+  const listRes = safeRun(
+    `git ls-files -z -- ${shellQuote(':(glob)**/package.json')}`,
+    {
+      cwd: root,
+    },
+  );
   const manifests = listRes.ok ? listRes.out.split('\0').filter(Boolean) : [];
 
   const names: Array<string> = [];
@@ -39,8 +45,11 @@ export function resolvePackageDir(nameOrDir: string, cwd: string = process.cwd()
   for (const manifest of manifests) {
     let name: unknown;
     try {
-      name = (JSON.parse(fs.readFileSync(path.join(root, manifest), 'utf8')) as { name?: unknown })
-        .name;
+      name = (
+        JSON.parse(fs.readFileSync(path.join(root, manifest), 'utf8')) as {
+          name?: unknown;
+        }
+      ).name;
     } catch {
       continue;
     }

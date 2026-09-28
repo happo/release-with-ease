@@ -32,7 +32,9 @@ export function getDefaultBranch(): string | null {
   }
 
   // Last resort: ask GitHub via gh.
-  const ghRes = safeRun('gh repo view --json defaultBranchRef -q .defaultBranchRef.name');
+  const ghRes = safeRun(
+    'gh repo view --json defaultBranchRef -q .defaultBranchRef.name',
+  );
   if (ghRes.ok) {
     const name = ghRes.out.trim();
     if (name) return name;
@@ -57,7 +59,9 @@ export function preflightChecks(): { defaultBranch: string } {
 
   const currentBranch = getCurrentBranch();
   if (!currentBranch) {
-    throw new Error('HEAD is detached. Check out the default branch before releasing.');
+    throw new Error(
+      'HEAD is detached. Check out the default branch before releasing.',
+    );
   }
   if (currentBranch !== defaultBranch) {
     throw new Error(
@@ -82,8 +86,12 @@ export function preflightChecks(): { defaultBranch: string } {
     const local = localRes.out.trim();
     const remote = remoteRes.out.trim();
     if (local !== remote) {
-      const aheadRes = safeRun(`git rev-list --count origin/${defaultBranch}..HEAD`);
-      const behindRes = safeRun(`git rev-list --count HEAD..origin/${defaultBranch}`);
+      const aheadRes = safeRun(
+        `git rev-list --count origin/${defaultBranch}..HEAD`,
+      );
+      const behindRes = safeRun(
+        `git rev-list --count HEAD..origin/${defaultBranch}`,
+      );
       const ahead = aheadRes.ok ? Number(aheadRes.out.trim()) : 0;
       const behind = behindRes.ok ? Number(behindRes.out.trim()) : 0;
       if (behind > 0) {
@@ -102,7 +110,9 @@ export function preflightChecks(): { defaultBranch: string } {
   return { defaultBranch };
 }
 
-export function getLastVersionTag(prefix: string = DEFAULT_TAG_PREFIX): string | null {
+export function getLastVersionTag(
+  prefix: string = DEFAULT_TAG_PREFIX,
+): string | null {
   const pattern = shellQuote(`${prefix}[0-9]*.[0-9]*.[0-9]*`);
   const res = safeRun(`git describe --tags --match ${pattern} --abbrev=0`);
   if (res.ok) return res.out.trim();
@@ -110,7 +120,9 @@ export function getLastVersionTag(prefix: string = DEFAULT_TAG_PREFIX): string |
 }
 
 export function tagExists(tag: string): boolean {
-  return safeRun(`git rev-parse --quiet --verify ${shellQuote(`refs/tags/${tag}`)}`).ok;
+  return safeRun(
+    `git rev-parse --quiet --verify ${shellQuote(`refs/tags/${tag}`)}`,
+  ).ok;
 }
 
 export interface LastRelease {
@@ -133,13 +145,19 @@ export interface LastRelease {
  * And only if HEAD descends from it, since a tag on a branch that never
  * merged would make `<tag>..HEAD` the whole mainline.
  */
-export function getLastReleaseTag(prefix: string, currentVersion: string | undefined): LastRelease {
+export function getLastReleaseTag(
+  prefix: string,
+  currentVersion: string | undefined,
+): LastRelease {
   const tag = getLastVersionTag(prefix);
   if (tag || prefix === DEFAULT_TAG_PREFIX || !currentVersion) {
     return { tag, fromDefaultPrefix: false };
   }
   const legacy = `${DEFAULT_TAG_PREFIX}${currentVersion}`;
-  if (tagExists(legacy) && safeRun(`git merge-base --is-ancestor ${shellQuote(legacy)} HEAD`).ok) {
+  if (
+    tagExists(legacy) &&
+    safeRun(`git merge-base --is-ancestor ${shellQuote(legacy)} HEAD`).ok
+  ) {
     return { tag: legacy, fromDefaultPrefix: true };
   }
   return { tag: null, fromDefaultPrefix: false };
@@ -151,7 +169,10 @@ export function getLastReleaseTag(prefix: string, currentVersion: string | undef
  * checks refused a dirty working tree, so the commit holds exactly what the
  * release changed.
  */
-export function commitAndTagRelease(release: ReleaseName, files: ReadonlyArray<string>): void {
+export function commitAndTagRelease(
+  release: ReleaseName,
+  files: ReadonlyArray<string>,
+): void {
   run(`git add -- ${files.map(shellQuote).join(' ')}`);
   run(`git commit -m ${shellQuote(release.label)}`);
   run(`git tag -m ${shellQuote(release.label)} ${shellQuote(release.tag)}`);
@@ -163,7 +184,9 @@ export function commitAndTagRelease(release: ReleaseName, files: ReadonlyArray<s
  * lying around locally have no business going out with this one.
  */
 export function pushRelease(branch: string, release: ReleaseName): void {
-  run(`git push origin ${shellQuote(branch)} ${shellQuote(`refs/tags/${release.tag}`)}`);
+  run(
+    `git push origin ${shellQuote(branch)} ${shellQuote(`refs/tags/${release.tag}`)}`,
+  );
 }
 
 /**
@@ -186,7 +209,10 @@ export function pathspecSuffix(paths: ReadonlyArray<string>): string {
   return ` -- ${paths.map(shellQuote).join(' ')}`;
 }
 
-export function getCommitRange(lastTag: string | null, paths: ReadonlyArray<string> = []): string {
+export function getCommitRange(
+  lastTag: string | null,
+  paths: ReadonlyArray<string> = [],
+): string {
   const pathspec = pathspecSuffix(paths);
   // --first-parent walks only the mainline of history: for a PR merged via
   // a merge commit, that means the merge commit itself shows up but the

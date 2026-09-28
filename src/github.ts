@@ -56,9 +56,9 @@ export interface OrderedStack<T> {
  * the reused one can still spell out a plausible-looking chain — so what
  * comes back here is a candidate for `isVerifiedChain` to check against git.
  */
-export function chainByBranchNames<T extends Pick<PullRequest, 'baseRefName' | 'headRefName'>>(
-  prs: ReadonlyArray<T>,
-): Array<T> | null {
+export function chainByBranchNames<
+  T extends Pick<PullRequest, 'baseRefName' | 'headRefName'>,
+>(prs: ReadonlyArray<T>): Array<T> | null {
   const heads = new Set(prs.map((pr) => pr.headRefName));
   const bottom = prs.filter((pr) => !heads.has(pr.baseRefName));
   if (bottom.length !== 1 || bottom[0] === undefined) return null;
@@ -97,7 +97,8 @@ export function isVerifiedChain(
 
   // `--is-ancestor` exits non-zero both when it isn't an ancestor and when
   // the objects aren't here to compare — neither is something we can measure.
-  const isAncestor = (a: string, b: string) => safeRun(`git merge-base --is-ancestor ${a} ${b}`).ok;
+  const isAncestor = (a: string, b: string) =>
+    safeRun(`git merge-base --is-ancestor ${a} ${b}`).ok;
 
   for (const pr of orderedPrs) {
     if (!isAncestor(pr.headRefOid, mergeSha)) return false;
@@ -121,7 +122,10 @@ export function isVerifiedChain(
  * same claim, so both wait on the same check.
  */
 export function orderStack<
-  T extends Pick<PullRequest, 'number' | 'baseRefName' | 'headRefName' | 'headRefOid'>,
+  T extends Pick<
+    PullRequest,
+    'number' | 'baseRefName' | 'headRefName' | 'headRefOid'
+  >,
 >(prs: ReadonlyArray<T>, mergeSha: string): OrderedStack<T> {
   if (prs.length < 2) return { prs: [...prs], verified: false };
 
@@ -168,7 +172,8 @@ export function filterStackByPaths<T extends Pick<PullRequest, 'headRefOid'>>(
   paths: ReadonlyArray<string>,
 ): Array<T> {
   const orderedPrs = stack.prs;
-  if (!paths.length || orderedPrs.length < 2 || !stack.verified) return [...orderedPrs];
+  if (!paths.length || orderedPrs.length < 2 || !stack.verified)
+    return [...orderedPrs];
 
   const firstParent = safeRun(`git rev-parse ${mergeSha}^1`);
   if (!firstParent.ok) return [...orderedPrs];
@@ -191,7 +196,9 @@ export function fetchGitHubMeta(
 ): Array<CommitWithMeta> {
   // Without gh there is no repository to ask about, but the commit messages
   // are still here and still say which pull request they came from.
-  const repoRes = safeRun('gh repo view --json nameWithOwner -q .nameWithOwner');
+  const repoRes = safeRun(
+    'gh repo view --json nameWithOwner -q .nameWithOwner',
+  );
   if (!repoRes.ok) {
     return commits.map((c) => ({
       ...c,

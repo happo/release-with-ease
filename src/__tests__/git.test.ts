@@ -35,7 +35,10 @@ describe('shellQuote', () => {
   // The point of quoting is what the shell does with the result, so round-trip
   // it through a real one rather than asserting on the escaping by eye.
   const echoed = (value: string) =>
-    execSync(`printf %s ${shellQuote(value)}`, { encoding: 'utf8', shell: '/bin/sh' });
+    execSync(`printf %s ${shellQuote(value)}`, {
+      encoding: 'utf8',
+      shell: '/bin/sh',
+    });
 
   it('escapes an embedded single quote so the shell cannot break out', () => {
     assert.strictEqual(shellQuote("it's"), String.raw`'it'\''s'`);
@@ -78,7 +81,8 @@ describe('parseCommits', () => {
   });
 
   it('splits records and fields on the separators git was told to use', () => {
-    const raw = 'abc\u{1F}Subject one\u{1F}Body one\u{1E}\ndef\u{1F}Subject two\u{1F}\u{1E}';
+    const raw =
+      'abc\u{1F}Subject one\u{1F}Body one\u{1E}\ndef\u{1F}Subject two\u{1F}\u{1E}';
     assert.deepStrictEqual(parseCommits(raw), [
       { hash: 'abc', subject: 'Subject one', body: 'Body one' },
       { hash: 'def', subject: 'Subject two', body: '' },
@@ -86,7 +90,9 @@ describe('parseCommits', () => {
   });
 
   it('keeps a multi-line body in one record', () => {
-    const parsed = parseCommits('abc\u{1F}Subject\u{1F}line one\nline two\u{1E}');
+    const parsed = parseCommits(
+      'abc\u{1F}Subject\u{1F}line one\nline two\u{1E}',
+    );
     assert.strictEqual(parsed[0]?.body, 'line one\nline two');
   });
 });
@@ -263,7 +269,10 @@ describe('against a real repository', () => {
       tmpfs.mock({});
       const repo = initRepo();
       repo.commit(
-        { 'packages/cli/package.json': '{}', 'packages/web/package.json': '{}' },
+        {
+          'packages/cli/package.json': '{}',
+          'packages/web/package.json': '{}',
+        },
         'Add packages',
       );
       process.chdir(tmpfs.fullPath('work/packages/cli'));
@@ -272,14 +281,19 @@ describe('against a real repository', () => {
       const release = releaseName('cli@', '1.0.1');
       commitAndTagRelease(release, ['package.json']);
 
-      assert.strictEqual(repo.git('log', '-1', '--format=%s').trim(), 'cli@1.0.1');
+      assert.strictEqual(
+        repo.git('log', '-1', '--format=%s').trim(),
+        'cli@1.0.1',
+      );
       assert.strictEqual(
         repo.git('show', '--name-only', '--format=', 'HEAD').trim(),
         'packages/cli/package.json',
       );
       assert.strictEqual(repo.sha('cli@1.0.1^{commit}'), repo.sha('HEAD'));
       assert.strictEqual(
-        repo.git('tag', '-l', '--format=%(contents:subject)', 'cli@1.0.1').trim(),
+        repo
+          .git('tag', '-l', '--format=%(contents:subject)', 'cli@1.0.1')
+          .trim(),
         'cli@1.0.1',
       );
     });
@@ -312,7 +326,10 @@ describe('against a real repository', () => {
       tmpfs.mock({});
       const repo = initRepo();
       repo.git('checkout', '-b', 'some-feature');
-      assert.throws(preflightChecks, /must be made from the default branch \("main"\)/);
+      assert.throws(
+        preflightChecks,
+        /must be made from the default branch \("main"\)/,
+      );
     });
 
     it('refuses a detached HEAD', () => {
@@ -355,7 +372,10 @@ describe('against a real repository', () => {
       repo.commit({ 'a.txt': 'a' }, 'Add a');
       repo.commit({ 'b.txt': 'b' }, 'Add b');
 
-      assert.deepStrictEqual(subjects(getCommitRange('v1.0.0')), ['Add b', 'Add a']);
+      assert.deepStrictEqual(subjects(getCommitRange('v1.0.0')), [
+        'Add b',
+        'Add a',
+      ]);
     });
 
     it('is empty when nothing landed since the tag', () => {
@@ -371,7 +391,10 @@ describe('against a real repository', () => {
       const repo = initRepo();
       repo.commit({ 'a.txt': 'a' }, 'Add a');
 
-      assert.deepStrictEqual(subjects(getCommitRange(null)), ['Add a', 'Initial commit']);
+      assert.deepStrictEqual(subjects(getCommitRange(null)), [
+        'Add a',
+        'Initial commit',
+      ]);
     });
 
     it('collapses a merged branch to its merge commit, not its commits', () => {
@@ -384,7 +407,9 @@ describe('against a real repository', () => {
       repo.git('checkout', 'main');
       repo.git('merge', '--no-ff', 'feature', '-m', 'Add the feature (#1)');
 
-      assert.deepStrictEqual(subjects(getCommitRange('v1.0.0')), ['Add the feature (#1)']);
+      assert.deepStrictEqual(subjects(getCommitRange('v1.0.0')), [
+        'Add the feature (#1)',
+      ]);
     });
 
     it('narrows to the commits that touched a pathspec', () => {
@@ -394,13 +419,18 @@ describe('against a real repository', () => {
       repo.commit({ 'packages/cli/index.js': 'cli' }, 'Change the cli');
       repo.commit({ 'packages/web/index.js': 'web' }, 'Change the web app');
 
-      assert.deepStrictEqual(subjects(getCommitRange('v1.0.0', ['packages/cli'])), [
-        'Change the cli',
-      ]);
-      assert.deepStrictEqual(subjects(getCommitRange('v1.0.0', ['packages/web'])), [
-        'Change the web app',
-      ]);
-      assert.deepStrictEqual(subjects(getCommitRange('v1.0.0', ['packages/none'])), []);
+      assert.deepStrictEqual(
+        subjects(getCommitRange('v1.0.0', ['packages/cli'])),
+        ['Change the cli'],
+      );
+      assert.deepStrictEqual(
+        subjects(getCommitRange('v1.0.0', ['packages/web'])),
+        ['Change the web app'],
+      );
+      assert.deepStrictEqual(
+        subjects(getCommitRange('v1.0.0', ['packages/none'])),
+        [],
+      );
     });
 
     it('still shows a merge commit when the merged work touched the pathspec', () => {
@@ -413,9 +443,10 @@ describe('against a real repository', () => {
         mergeMessage: 'Land the stack (#2)',
       });
 
-      assert.deepStrictEqual(subjects(getCommitRange('v1.0.0', ['packages/cli'])), [
-        'Land the stack (#2)',
-      ]);
+      assert.deepStrictEqual(
+        subjects(getCommitRange('v1.0.0', ['packages/cli'])),
+        ['Land the stack (#2)'],
+      );
     });
 
     it('passes a tag with shell characters in it through to git intact', () => {
@@ -425,7 +456,9 @@ describe('against a real repository', () => {
       repo.git('tag', 'a$x;b@1.0.0');
       repo.commit({ 'a.txt': 'a' }, 'Add a');
 
-      assert.deepStrictEqual(subjects(getCommitRange('a$x;b@1.0.0')), ['Add a']);
+      assert.deepStrictEqual(subjects(getCommitRange('a$x;b@1.0.0')), [
+        'Add a',
+      ]);
     });
 
     it('accepts a pathspec containing a space', () => {
@@ -435,9 +468,10 @@ describe('against a real repository', () => {
       repo.commit({ 'my packages/a.js': 'a' }, 'Change the spaced package');
       repo.commit({ 'other/b.js': 'b' }, 'Change something else');
 
-      assert.deepStrictEqual(subjects(getCommitRange('v1.0.0', ['my packages'])), [
-        'Change the spaced package',
-      ]);
+      assert.deepStrictEqual(
+        subjects(getCommitRange('v1.0.0', ['my packages'])),
+        ['Change the spaced package'],
+      );
     });
   });
 });

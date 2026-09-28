@@ -22,7 +22,9 @@ export function fetchNpmOtp(): string | null {
       console.log('🔑 Using OTP from NPM_OTP_COMMAND.');
       return code;
     }
-    console.log('⚠️  NPM_OTP_COMMAND did not produce a valid OTP; falling back.');
+    console.log(
+      '⚠️  NPM_OTP_COMMAND did not produce a valid OTP; falling back.',
+    );
   }
 
   // 2. 1Password CLI

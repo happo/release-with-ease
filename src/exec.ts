@@ -1,4 +1,7 @@
-import { execSync, type ExecSyncOptionsWithStringEncoding } from 'node:child_process';
+import {
+  execSync,
+  type ExecSyncOptionsWithStringEncoding,
+} from 'node:child_process';
 
 export type RunOptions = Partial<ExecSyncOptionsWithStringEncoding>;
 

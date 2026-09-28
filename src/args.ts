@@ -76,7 +76,10 @@ export function configuredPaths(pkg: PackageJson): Array<string> {
   const list = (Array.isArray(raw) ? raw : [raw]).map((entry) =>
     typeof entry === 'string' ? entry.trim() : entry,
   );
-  if (!list.length || list.some((entry) => typeof entry !== 'string' || !entry)) {
+  if (
+    !list.length ||
+    list.some((entry) => typeof entry !== 'string' || !entry)
+  ) {
     throw new UsageError(
       '"release-with-ease".paths in package.json must be a path, or an array of paths.',
     );

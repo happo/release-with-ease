@@ -61,17 +61,24 @@ function escapeChangeTags(text: string): string {
  * keeps a description's own headings and lists from running into the next
  * change.
  */
-export function buildUserContent(commits: ReadonlyArray<CommitWithMeta>): string {
+export function buildUserContent(
+  commits: ReadonlyArray<CommitWithMeta>,
+): string {
   return commits
     .map((c, i) => {
       const body = c.body ? c.body.trim() : '';
       const truncatedBody =
-        body.length > MAX_BODY_LENGTH ? `${body.slice(0, MAX_BODY_LENGTH)}…` : body;
+        body.length > MAX_BODY_LENGTH
+          ? `${body.slice(0, MAX_BODY_LENGTH)}…`
+          : body;
       const meta: Array<string> = [];
       if (c.githubLogin) meta.push(`by @${c.githubLogin}`);
       if (c.prNumber) meta.push(`in #${c.prNumber}`);
       const metaStr = meta.length ? ` [${meta.join(' ')}]` : '';
-      const lines = [`<change id="${i + 1}">`, `${escapeChangeTags(c.subject)}${metaStr}`];
+      const lines = [
+        `<change id="${i + 1}">`,
+        `${escapeChangeTags(c.subject)}${metaStr}`,
+      ];
       if (truncatedBody) lines.push(escapeChangeTags(truncatedBody));
       lines.push('</change>');
       return lines.join('\n');
@@ -152,7 +159,8 @@ export function parseReleaseSuggestion(
   if (Array.isArray(parsed.omitted)) {
     for (const entry of parsed.omitted as Array<RawOmitted | null>) {
       const id = changeId(entry?.change);
-      if (id !== null && typeof entry?.reason === 'string') reasons.set(id, entry.reason);
+      if (id !== null && typeof entry?.reason === 'string')
+        reasons.set(id, entry.reason);
     }
   }
 
@@ -224,7 +232,9 @@ async function fetchWithRetry(
     maxRetries: Math.max(0, options.maxRetries ?? DEFAULT_MAX_RETRIES),
     baseDelayMs: Math.max(0, options.baseDelayMs ?? DEFAULT_BASE_DELAY_MS),
     maxDelayMs: Math.max(0, options.maxDelayMs ?? DEFAULT_MAX_DELAY_MS),
-    sleep: options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms))),
+    sleep:
+      options.sleep ??
+      ((ms) => new Promise((resolve) => setTimeout(resolve, ms))),
   };
 
   let lastError: unknown;
@@ -241,7 +251,11 @@ async function fetchWithRetry(
       continue;
     }
 
-    if (res.ok || !RETRYABLE_STATUSES.has(res.status) || attempt === opts.maxRetries) {
+    if (
+      res.ok ||
+      !RETRYABLE_STATUSES.has(res.status) ||
+      attempt === opts.maxRetries
+    ) {
       return res;
     }
 
@@ -255,7 +269,9 @@ async function fetchWithRetry(
     await opts.sleep(backoffDelayMs(attempt, retryAfterMs, opts));
   }
   // Unreachable: the loop above always returns or throws.
-  throw lastError instanceof Error ? lastError : new Error('Failed to reach Claude API');
+  throw lastError instanceof Error
+    ? lastError
+    : new Error('Failed to reach Claude API');
 }
 
 export async function askClaudeForRelease(
@@ -266,7 +282,8 @@ export async function askClaudeForRelease(
   const apiKey = process.env['ANTHROPIC_API_KEY'];
   if (!apiKey) return null;
 
-  const baseUrl = process.env['ANTHROPIC_BASE_URL'] || 'https://api.anthropic.com';
+  const baseUrl =
+    process.env['ANTHROPIC_BASE_URL'] || 'https://api.anthropic.com';
 
   const res = await fetchWithRetry(
     `${baseUrl}/v1/messages`,
@@ -296,7 +313,9 @@ export async function askClaudeForRelease(
   );
   if (!res.ok) {
     console.error(await res.text());
-    throw new Error(`Failed to determine version bump: ${res.statusText} ${res.status}`);
+    throw new Error(
+      `Failed to determine version bump: ${res.statusText} ${res.status}`,
+    );
   }
   const data = (await res.json()) as {
     stop_reason?: string;
@@ -305,7 +324,9 @@ export async function askClaudeForRelease(
   // A cut-off or declined answer would otherwise surface as a JSON syntax
   // error, which says nothing about what went wrong.
   if (data.stop_reason === 'max_tokens' || data.stop_reason === 'refusal') {
-    throw new Error(`Claude did not finish the release notes (stop reason: ${data.stop_reason})`);
+    throw new Error(
+      `Claude did not finish the release notes (stop reason: ${data.stop_reason})`,
+    );
   }
   // The answer follows a thinking block, so it is not the first one.
   const text = data.content?.find((block) => block.type === 'text')?.text;

@@ -31,7 +31,9 @@ function git(args: Array<string>, cwd: string = tmpfs.fullPath(WORK)): string {
     },
   });
   if (result.status !== 0) {
-    throw new Error(`git ${args.join(' ')} failed:\n${result.stdout}\n${result.stderr}`);
+    throw new Error(
+      `git ${args.join(' ')} failed:\n${result.stdout}\n${result.stderr}`,
+    );
   }
   return result.stdout;
 }
@@ -120,7 +122,13 @@ export function mergeTwoDeepStack(
   const topHeadSha = repo.commit(options.topFiles, 'Top of the stack');
 
   repo.git('checkout', 'main');
-  repo.git('merge', '--no-ff', topBranch, '-m', options.mergeMessage ?? `Top of the stack (#2)`);
+  repo.git(
+    'merge',
+    '--no-ff',
+    topBranch,
+    '-m',
+    options.mergeMessage ?? `Top of the stack (#2)`,
+  );
   const mergeSha = repo.sha('HEAD');
   repo.publish();
 
