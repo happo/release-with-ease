@@ -5,6 +5,7 @@ import { afterEach, describe, it } from 'vitest';
 import {
   configuredPaths,
   configuredTagPrefix,
+  configuredWaitFor,
   parseArgs,
   unscopedSubdirectoryWarning,
   UsageError,
@@ -272,6 +273,84 @@ describe('unscopedSubdirectoryWarning', () => {
     assert.match(
       unscopedSubdirectoryWarning([], {}) ?? '',
       /This package lives in a subdirectory/,
+    );
+  });
+});
+
+describe('configuredWaitFor', () => {
+  it('is empty when nothing is configured', () => {
+    assert.deepStrictEqual(configuredWaitFor({}), []);
+    assert.deepStrictEqual(
+      configuredWaitFor({ 'release-with-ease': { tagPrefix: 'docs@' } }),
+      [],
+    );
+  });
+
+  it('reads each package with its paths and tag prefix', () => {
+    assert.deepStrictEqual(
+      configuredWaitFor({
+        'release-with-ease': {
+          waitFor: [
+            { paths: ['../happo-web'], tagPrefix: 'happo-web@' },
+            { paths: ' ../api ', tagPrefix: 'api@' },
+          ],
+        },
+      }),
+      [
+        { paths: ['../happo-web'], tagPrefix: 'happo-web@' },
+        { paths: ['../api'], tagPrefix: 'api@' },
+      ],
+    );
+  });
+
+  it('refuses anything but an array', () => {
+    assert.throws(
+      () =>
+        configuredWaitFor({
+          'release-with-ease': {
+            waitFor: { paths: ['../server'], tagPrefix: 'server@' },
+          },
+        } as never),
+      /waitFor in package\.json must be an array/,
+    );
+  });
+
+  it('refuses an entry without paths', () => {
+    assert.throws(
+      () =>
+        configuredWaitFor({
+          'release-with-ease': { waitFor: [{ tagPrefix: 'server@' }] },
+        }),
+      /waitFor\[0\]\.paths in package\.json must be a path/,
+    );
+  });
+
+  it('refuses an entry without a tag prefix, or with an invalid one', () => {
+    assert.throws(
+      () =>
+        configuredWaitFor({
+          'release-with-ease': { waitFor: [{ paths: ['../server'] }] },
+        }),
+      /waitFor\[0\]\.tagPrefix in package\.json must be a non-empty string/,
+    );
+    assert.throws(
+      () =>
+        configuredWaitFor({
+          'release-with-ease': {
+            waitFor: [{ paths: ['../server'], tagPrefix: 'server:' }],
+          },
+        }),
+      /does not make a valid git tag/,
+    );
+  });
+
+  it('refuses an entry that is not an object', () => {
+    assert.throws(
+      () =>
+        configuredWaitFor({
+          'release-with-ease': { waitFor: ['../server'] },
+        } as never),
+      UsageError,
     );
   });
 });

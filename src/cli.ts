@@ -26,6 +26,7 @@ import path from 'node:path';
 import {
   configuredPaths,
   configuredTagPrefix,
+  configuredWaitFor,
   type PackageJson,
   parseArgs,
   unscopedSubdirectoryWarning,
@@ -54,8 +55,14 @@ import { type CommitWithMeta, fetchGitHubMeta } from './github.ts';
 import { fetchNpmOtp } from './npm.ts';
 import { writeVersion } from './packageJson.ts';
 import { prompt } from './prompt.ts';
-import { releaseName } from './tags.ts';
-import { type Bump, bumpVersionString, isBump } from './version.ts';
+import { DEFAULT_TAG_PREFIX, releaseName } from './tags.ts';
+import {
+  type Bump,
+  bumpVersionString,
+  compareVersions,
+  isBump,
+} from './version.ts';
+import { checkWaitFor, waitForMessage } from './waitFor.ts';
 import { resolvePackageDir } from './workspace.ts';
 
 /**
@@ -165,10 +172,11 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
   const isPublicPackage = pkg.private !== true && pkg.private !== 'true';
   const privateFieldMissing = isPublicPackage && pkg.private === undefined;
   const paths = pathArgs.length ? pathArgs : configuredPaths(pkg);
-  // Validated here, before the fetch below, so that a bad tagPrefix in
-  // package.json fails without touching the remote.
-  // eslint-disable-next-line unicorn/no-declarations-before-early-exit
+  // Validated here, before the fetch below, so that a bad tagPrefix or
+  // waitFor in package.json fails without touching the remote.
   const tagPrefix = configuredTagPrefix(pkg);
+  // eslint-disable-next-line unicorn/no-declarations-before-early-exit
+  const waitFor = configuredWaitFor(pkg);
 
   // The check below for a tag that already exists, and finding the last
   // release at all, only see the tags that are here locally.
@@ -185,6 +193,22 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
   if (fromDefaultPrefix) {
     console.log(
       `ℹ️  No ${tagPrefix} tags yet; starting from ${lastVersionTag}, the tag for the version in package.json.`,
+    );
+  }
+  // A release can be tagged without package.json hearing about it: a deploy
+  // tool that releases docs at the commit it just deployed can't add a commit
+  // there. Bumping package.json's version would then land on a version that
+  // was already released, or behind it, so the newer of the two is the base.
+  const lastTagVersion = lastVersionTag?.slice(
+    (fromDefaultPrefix ? DEFAULT_TAG_PREFIX : tagPrefix).length,
+  );
+  const tagIsAhead =
+    pkg.version !== undefined &&
+    lastTagVersion !== undefined &&
+    compareVersions(lastTagVersion, pkg.version) > 0;
+  if (tagIsAhead) {
+    console.log(
+      `ℹ️  ${lastVersionTag} is newer than the ${pkg.version} in package.json; the next version follows ${lastTagVersion}.`,
     );
   }
 
@@ -206,6 +230,25 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
       }. Aborting.`,
     );
     process.exit(1);
+  }
+
+  // Before Claude is asked anything, so that a release that should wait costs
+  // nothing.
+  let waitingOn = 0;
+  for (const other of waitFor) {
+    const status = checkWaitFor(other);
+    const message = waitForMessage(other, status);
+    if (message) console.log(`\n${message}`);
+    if (status.kind === 'unreleased') waitingOn += 1;
+  }
+  if (waitingOn) {
+    const answer = (await prompt('\nRelease anyway? [y/N] '))
+      .trim()
+      .toLowerCase();
+    if (answer !== 'y' && answer !== 'yes') {
+      console.log('Aborted by user.');
+      process.exit(1);
+    }
   }
 
   // Resolve pull requests before printing the list: a stack merged as one
@@ -247,7 +290,7 @@ export async function main(argv: ReadonlyArray<string>): Promise<void> {
     process.exit(1);
   }
 
-  const curVersion = pkg.version;
+  const curVersion = tagIsAhead ? lastTagVersion : pkg.version;
   if (!curVersion) {
     throw new Error('package.json has no "version" field.');
   }

@@ -65,10 +65,16 @@ async function fakeClaude(
   return { url: `http://127.0.0.1:${port}`, asked };
 }
 
+/**
+ * `input` is typed into stdin up front. An array is one answer per prompt
+ * instead, each typed once the prompt is showing: every prompt reads stdin
+ * through a readline of its own, which keeps whatever it read past its line
+ * when it closes, so answers typed up front would all go to the first one.
+ */
 function runCli(
   args: Array<string>,
   env: Record<string, string>,
-  input: string,
+  input: string | Array<string>,
 ): Promise<{ code: number | null; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn(
@@ -87,11 +93,20 @@ function runCli(
     );
     let stdout = '';
     let stderr = '';
-    child.stdout.on('data', (chunk) => (stdout += chunk));
+    const answers = typeof input === 'string' ? null : [...input];
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk;
+      // Every prompt ends in its choices, `[y/N] ` and the like.
+      if (answers?.length && /\] $/.test(stdout)) {
+        child.stdin.write(`${answers.shift()}\n`);
+        // An open stdin would keep the CLI from exiting.
+        if (!answers.length) child.stdin.end();
+      }
+    });
     child.stderr.on('data', (chunk) => (stderr += chunk));
     child.on('error', reject);
     child.on('close', (code) => resolve({ code, stdout, stderr }));
-    child.stdin.end(input);
+    if (typeof input === 'string') child.stdin.end(input);
   });
 }
 
@@ -293,9 +308,14 @@ describe('releasing one package of a monorepo from its root', () => {
       'Add package',
     );
     repo.git('tag', 'pkg@1.0.0');
+    // Someone released 1.0.1 from a branch, without package.json ever saying
+    // so. Off the mainline, so it is not the last release as far as git
+    // describe can see, only a tag that is in the way.
+    repo.git('checkout', '-b', 'hotfix');
+    repo.commit({ 'hotfix.js': 'fix' }, 'Hot fix');
+    repo.git('tag', 'pkg@1.0.1');
+    repo.git('checkout', 'main');
     repo.commit({ 'index.js': 'fix' }, 'Fix a bug');
-    // Someone released 1.0.1 without package.json ever saying so.
-    repo.git('tag', 'pkg@1.0.1', 'HEAD~1');
     repo.publish();
     repo.git('push', 'origin', '--tags');
     const before = repo.sha('HEAD');
@@ -316,5 +336,187 @@ describe('releasing one package of a monorepo from its root', () => {
     assert.match(result.stderr, /The tag pkg@1\.0\.1 already exists/);
     assert.strictEqual(repo.sha('HEAD'), before);
     assert.strictEqual(fakeGh.releaseCreateArgs(), null);
+  }, 30_000);
+
+  it('bumps from a release tagged without a package.json bump', async () => {
+    tmpfs.mock({});
+    const repo = initRepo();
+    repo.commit(
+      {
+        'package.json': `${JSON.stringify(
+          {
+            name: 'docs',
+            version: '3.61.2',
+            private: true,
+            'release-with-ease': { tagPrefix: 'docs@' },
+          },
+          null,
+          2,
+        )}\n`,
+      },
+      'Add package',
+    );
+    repo.git('tag', 'docs@3.61.2');
+    repo.commit({ 'a.md': 'a' }, 'Document the new thing');
+    // A deploy tool released the docs at the commit it deployed, where it
+    // could not add a commit bumping package.json.
+    repo.git('tag', 'docs@3.61.3');
+    repo.commit({ 'b.md': 'b' }, 'Fix a typo');
+    repo.publish();
+    repo.git('push', 'origin', '--tags');
+
+    fakeGh.install({
+      releaseUrl: 'https://github.com/o/r/releases/tag/docs%403.61.4',
+    });
+    const claude = await fakeClaude({
+      bump: 'patch',
+      reasoning: 'A typo.',
+      notes: ['Fix a typo'],
+    });
+
+    const result = await runCli(
+      [],
+      { ANTHROPIC_API_KEY: 'test-key', ANTHROPIC_BASE_URL: claude.url },
+      'y\n',
+    );
+    assert.strictEqual(result.code, 0, `${result.stdout}\n${result.stderr}`);
+    assert.match(
+      result.stdout,
+      /docs@3\.61\.3 is newer than the 3\.61\.2 in package\.json; the next version follows 3\.61\.3/,
+    );
+    assert.doesNotMatch(claude.asked[0] ?? '', /Document the new thing/);
+    assert.strictEqual(
+      repo.git('log', '-1', '--format=%s').trim(),
+      'docs@3.61.4',
+    );
+    const pkg = JSON.parse(
+      fs.readFileSync(tmpfs.fullPath('work/package.json'), 'utf8'),
+    );
+    assert.strictEqual(pkg.version, '3.61.4');
+  }, 30_000);
+});
+
+describe('a package that waits for another one', () => {
+  /**
+   * `docs` waits for `server`: both are released from one repository, and
+   * docs about a server change should not go out before the server does.
+   */
+  function docsAndServer(): ReturnType<typeof initRepo> {
+    tmpfs.mock({});
+    const repo = initRepo();
+    repo.commit(
+      {
+        'projects/server/package.json': `${JSON.stringify({ name: 'server', version: '1.0.0', private: true }, null, 2)}\n`,
+        'projects/docs/package.json': `${JSON.stringify(
+          {
+            name: 'docs',
+            version: '2.0.0',
+            private: true,
+            'release-with-ease': {
+              paths: ['.'],
+              tagPrefix: 'docs@',
+              waitFor: [{ paths: ['../server'], tagPrefix: 'server@' }],
+            },
+          },
+          null,
+          2,
+        )}\n`,
+      },
+      'Add projects',
+    );
+    repo.git('tag', 'server@1.0.0');
+    repo.git('tag', 'docs@2.0.0');
+    return repo;
+  }
+
+  it('asks before releasing while the other has unreleased changes', async () => {
+    const repo = docsAndServer();
+    repo.commit({ 'projects/server/index.js': 'new' }, 'Teach the server');
+    repo.commit({ 'projects/docs/new.md': 'new' }, 'Document the server');
+    repo.publish();
+    repo.git('push', 'origin', '--tags');
+    const before = repo.sha('HEAD');
+
+    fakeGh.install({ releaseUrl: 'unused' });
+    const claude = await fakeClaude({
+      bump: 'minor',
+      reasoning: 'New docs.',
+      notes: ['Document the server'],
+    });
+
+    const result = await runCli(
+      ['docs'],
+      { ANTHROPIC_API_KEY: 'test-key', ANTHROPIC_BASE_URL: claude.url },
+      'n\n',
+    );
+    assert.strictEqual(result.code, 1, `${result.stdout}\n${result.stderr}`);
+    assert.match(
+      result.stdout,
+      /\.\.\/server has 1 change since server@1\.0\.0 that is not released yet:\n {2}[0-9a-f]{7} Teach the server\n/,
+    );
+    assert.match(result.stdout, /Release anyway\? \[y\/N\] Aborted by user\./);
+    // Nothing was spent on it, and nothing changed.
+    assert.strictEqual(claude.asked.length, 0);
+    assert.strictEqual(repo.sha('HEAD'), before);
+    assert.strictEqual(fakeGh.releaseCreateArgs(), null);
+  }, 30_000);
+
+  it('releases anyway when told to', async () => {
+    const repo = docsAndServer();
+    repo.commit({ 'projects/server/index.js': 'new' }, 'Teach the server');
+    repo.commit({ 'projects/docs/typo.md': 'fixed' }, 'Fix a typo');
+    repo.publish();
+    repo.git('push', 'origin', '--tags');
+
+    fakeGh.install({
+      releaseUrl: 'https://github.com/o/r/releases/tag/docs%402.0.1',
+    });
+    const claude = await fakeClaude({
+      bump: 'patch',
+      reasoning: 'A typo.',
+      notes: ['Fix a typo'],
+    });
+
+    const result = await runCli(
+      ['docs'],
+      { ANTHROPIC_API_KEY: 'test-key', ANTHROPIC_BASE_URL: claude.url },
+      ['y', 'y'],
+    );
+    assert.strictEqual(result.code, 0, `${result.stdout}\n${result.stderr}`);
+    assert.match(result.stdout, /Release anyway\?/);
+    assert.match(
+      repo.git('ls-remote', '--tags', '--refs', 'origin'),
+      /refs\/tags\/docs@2\.0\.1$/m,
+    );
+  }, 30_000);
+
+  it('releases without asking once the other is released', async () => {
+    const repo = docsAndServer();
+    repo.commit({ 'projects/server/index.js': 'new' }, 'Teach the server');
+    repo.git('tag', 'server@1.1.0');
+    repo.commit({ 'projects/docs/new.md': 'new' }, 'Document the server');
+    repo.publish();
+    repo.git('push', 'origin', '--tags');
+
+    fakeGh.install({
+      releaseUrl: 'https://github.com/o/r/releases/tag/docs%402.1.0',
+    });
+    const claude = await fakeClaude({
+      bump: 'minor',
+      reasoning: 'New docs.',
+      notes: ['Document the server'],
+    });
+
+    const result = await runCli(
+      ['docs'],
+      { ANTHROPIC_API_KEY: 'test-key', ANTHROPIC_BASE_URL: claude.url },
+      'y\n',
+    );
+    assert.strictEqual(result.code, 0, `${result.stdout}\n${result.stderr}`);
+    assert.doesNotMatch(result.stdout, /Release anyway/);
+    assert.match(
+      repo.git('ls-remote', '--tags', '--refs', 'origin'),
+      /refs\/tags\/docs@2\.1\.0$/m,
+    );
   }, 30_000);
 });

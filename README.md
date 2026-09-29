@@ -86,6 +86,25 @@ Switching an existing package over needs no new tag by hand: when there is no `m
 
 A prefix has to make a valid git tag once a version is appended, so `:`, spaces and glob characters are refused.
 
+The next version is normally a bump of the one in `package.json`. When the last release tag is newer than that, because something released the package without a commit to bump it (a deploy tool tagging the commit it just deployed, say), the next version follows the tag instead, and the script says so.
+
+## Waiting for another package
+
+Some packages should not be released ahead of another one: documentation that describes a server change should not go out before the server does. List those packages under `waitFor`, each with its paths (relative to this package, like `paths`) and its tag prefix:
+
+```json
+{
+  "name": "docs",
+  "release-with-ease": {
+    "paths": ["."],
+    "tagPrefix": "docs@",
+    "waitFor": [{ "paths": ["../server"], "tagPrefix": "server@" }]
+  }
+}
+```
+
+Before Claude is asked anything, the script looks for mainline commits under each one's paths since its last release tag. If there are any, it lists them and asks whether to release anyway, defaulting to no. A package with no release tag at all can't be checked, and the script says so and carries on.
+
 ## Releasing from the repository root
 
 Name the package to release, and the script runs in that package's directory as if it had been started there:
