@@ -12,6 +12,7 @@ export interface PackageJson {
     paths?: string | Array<string>;
     path?: string | Array<string>;
     tagPrefix?: string;
+    waitFor?: Array<{ paths?: string | Array<string>; tagPrefix?: string }>;
   };
 }
 
@@ -72,8 +73,11 @@ export function configuredPaths(pkg: PackageJson): Array<string> {
   const config = pkg['release-with-ease'];
   const raw = config?.paths ?? config?.path;
   if (raw === undefined || raw === null) return [];
+  return pathList(raw, '"release-with-ease".paths');
+}
 
-  const list = (Array.isArray(raw) ? raw : [raw]).map((entry) =>
+function pathList(raw: unknown, where: string): Array<string> {
+  const list = (Array.isArray(raw) ? raw : [raw]).map((entry: unknown) =>
     typeof entry === 'string' ? entry.trim() : entry,
   );
   if (
@@ -81,7 +85,7 @@ export function configuredPaths(pkg: PackageJson): Array<string> {
     list.some((entry) => typeof entry !== 'string' || !entry)
   ) {
     throw new UsageError(
-      '"release-with-ease".paths in package.json must be a path, or an array of paths.',
+      `${where} in package.json must be a path, or an array of paths.`,
     );
   }
   return list as Array<string>;
@@ -98,9 +102,13 @@ export function configuredPaths(pkg: PackageJson): Array<string> {
 export function configuredTagPrefix(pkg: PackageJson): string {
   const raw = pkg['release-with-ease']?.tagPrefix;
   if (raw === undefined || raw === null) return DEFAULT_TAG_PREFIX;
+  return tagPrefix(raw, '"release-with-ease".tagPrefix');
+}
+
+function tagPrefix(raw: unknown, where: string): string {
   if (typeof raw !== 'string' || !raw) {
     throw new UsageError(
-      '"release-with-ease".tagPrefix in package.json must be a non-empty string, e.g. "my-package@".',
+      `${where} in package.json must be a non-empty string, e.g. "my-package@".`,
     );
   }
   // A leading dash would make the tag read as an option to `git tag` and
@@ -110,10 +118,48 @@ export function configuredTagPrefix(pkg: PackageJson): string {
     !safeRun(`git check-ref-format ${shellQuote(`refs/tags/${raw}1.0.0`)}`).ok
   ) {
     throw new UsageError(
-      `"release-with-ease".tagPrefix in package.json is "${raw}", which does not make a valid git tag.`,
+      `${where} in package.json is "${raw}", which does not make a valid git tag.`,
     );
   }
   return raw;
+}
+
+/** Another package in the repository whose releases this one waits for. */
+export interface WaitFor {
+  /** Its pathspecs, relative to this package like `paths`. */
+  paths: Array<string>;
+  /** The prefix its release tags carry. */
+  tagPrefix: string;
+}
+
+/**
+ * `"release-with-ease": { "waitFor": [{ "paths": [...], "tagPrefix": "..." }] }`
+ * in the package.json being released: packages this one should not be
+ * released ahead of. Documentation is the case it is for — docs that describe
+ * a server change should not go out before the server does — so a release is
+ * held for confirmation while any of them has changes since its last release.
+ */
+export function configuredWaitFor(pkg: PackageJson): Array<WaitFor> {
+  const raw: unknown = pkg['release-with-ease']?.waitFor;
+  if (raw === undefined || raw === null) return [];
+  const where = '"release-with-ease".waitFor';
+  if (!Array.isArray(raw)) {
+    throw new UsageError(
+      `${where} in package.json must be an array of { "paths", "tagPrefix" } objects.`,
+    );
+  }
+  return raw.map((entry: unknown, i) => {
+    if (typeof entry !== 'object' || entry === null) {
+      throw new UsageError(
+        `${where}[${i}] in package.json must be an object with "paths" and "tagPrefix".`,
+      );
+    }
+    const { paths, tagPrefix: prefix } = entry as Record<string, unknown>;
+    return {
+      paths: pathList(paths, `${where}[${i}].paths`),
+      tagPrefix: tagPrefix(prefix, `${where}[${i}].tagPrefix`),
+    };
+  });
 }
 
 function realpath(target: string): string | null {

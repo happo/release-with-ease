@@ -2,7 +2,7 @@ import assert from 'node:assert';
 
 import { describe, it } from 'vitest';
 
-import { bumpVersionString, isBump } from '../version.ts';
+import { bumpVersionString, compareVersions, isBump } from '../version.ts';
 
 describe('bumpVersionString', () => {
   it('bumps major and zeroes the rest', () => {
@@ -49,5 +49,23 @@ describe('isBump', () => {
     assert.ok(!isBump('Major'));
     assert.ok(!isBump('y'));
     assert.ok(!isBump(''));
+  });
+});
+
+describe('compareVersions', () => {
+  it('orders by major, then minor, then patch, as numbers', () => {
+    assert.ok(compareVersions('2.0.0', '1.9.9') > 0);
+    assert.ok(compareVersions('1.10.0', '1.9.0') > 0);
+    assert.ok(compareVersions('1.2.3', '1.2.10') < 0);
+    assert.strictEqual(compareVersions('1.2.3', '1.2.3'), 0);
+  });
+
+  it('ignores anything after the patch number', () => {
+    assert.strictEqual(compareVersions('1.2.3-beta.1', '1.2.3'), 0);
+  });
+
+  it('calls anything that is not a version equal', () => {
+    assert.strictEqual(compareVersions('next', '1.2.3'), 0);
+    assert.strictEqual(compareVersions('1.2.3', 'v1.2.3'), 0);
   });
 });
